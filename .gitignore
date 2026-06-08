@@ -1,0 +1,32 @@
+# Local environment
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+
+# Test artifacts (these are generated, not source)
+reports/*
+!reports/.gitkeep
+.pytest_cache/
+
+# Process state
+.pids/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# But DO commit:
+# - knowledge_base/screens_catalog.json (the durable Knowledge Base)
+# - All framework/ code
+# - All web_ui/ code
+# - docs/ and *.md files

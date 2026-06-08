@@ -1,0 +1,4 @@
+TC ID,Scenario,Screen,Step,Action,Target,Value,Expected,Priority,Notes
+TC-28795-01,Shipping with correct size values,shippingorderslist,1,click,Ship Customer Orders,,List opens,P1,
+TC-28795-01,Shipping with correct size values,shippingorderslist,2,fill,Search,WEB-12345,,P1,
+TC-28795-01,Shipping with correct size values,shippingorderslist,3,click,Search,,,P1,

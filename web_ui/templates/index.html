@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stratus QA · Backoffice automation platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ============== BRAND BAR (dark, 48px) ============== -->
+  <header class="brand-bar">
+    <div class="bb-logo">
+      <div class="bb-mark">SQ</div>
+      <div class="bb-name"><b>Stratus QA</b></div>
+    </div>
+    <div class="bb-crumbs">
+      <span class="now" id="crumb-now">Overview</span>
+    </div>
+    <div class="bb-spacer"></div>
+    <div class="bb-actions">
+      <button class="bb-action" id="open-palette" title="Search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        Search
+        <kbd>⌘K</kbd>
+      </button>
+      <button class="bb-env" id="env-chip">
+        <span class="dot"></span>
+        <span id="env-chip-name">No environment</span>
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <a class="bb-action" href="/report.html" target="_blank" title="Latest report">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      </a>
+    </div>
+    <div class="bb-avatar">U</div>
+  </header>
+
+  <!-- ============== TABS (40px) ============== -->
+  <nav class="tab-bar">
+    <a href="#/dashboard" class="tab" data-tab="dashboard">Overview</a>
+    <a href="#/new"       class="tab" data-tab="new">New run</a>
+    <a href="#/runs"      class="tab" data-tab="runs">Run history</a>
+    <a href="#/catalog"   class="tab" data-tab="catalog">Screen catalog</a>
+    <a href="#/converter" class="tab" data-tab="converter">YAML converter</a>
+    <a href="#/env"       class="tab" data-tab="env">Environments</a>
+    <a href="#/help"      class="tab" data-tab="help">Mode glossary</a>
+  </nav>
+
+  <!-- ============== SIDEBAR ============== -->
+  <aside class="sidebar">
+    <div class="side-section">Workspace</div>
+    <a href="#/dashboard" class="side-link" data-route="dashboard">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+      Overview
+    </a>
+    <a href="#/new" class="side-link" data-route="new">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      New run
+    </a>
+    <a href="#/runs" class="side-link" data-route="runs">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      Run history
+      <span class="count" id="runs-count">—</span>
+    </a>
+    <a href="#/catalog" class="side-link" data-route="catalog">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+      Screen catalog
+      <span class="count" id="catalog-count">—</span>
+    </a>
+    <a href="#/converter" class="side-link" data-route="converter">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="m9 18 3-3-3-3"/><path d="m15 12 3 3-3 3"/></svg>
+      YAML converter
+    </a>
+
+    <div class="side-section">Configuration</div>
+    <a href="#/env" class="side-link" data-route="env">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="0"/><rect x="2" y="14" width="20" height="8" rx="0"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+      Environments
+    </a>
+    <a href="#/help" class="side-link" data-route="help">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      Mode glossary
+    </a>
+  </aside>
+
+  <!-- ============== MAIN ============== -->
+  <main class="main">
+    <div class="page">
+
+      <!-- ========== OVERVIEW ========== -->
+      <section class="view" data-view="dashboard">
+        <div class="ph">
+          <div>
+            <h1 class="ph-title">Overview</h1>
+            <p class="ph-sub">Stratus BackOffice test coverage and run health.</p>
+          </div>
+          <div class="ph-actions">
+            <a href="#/new" class="btn btn-secondary">Create test run</a>
+            <a href="#/new?preset=bulk" class="btn btn-primary">
+              Run nightly regression
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            </a>
+          </div>
+        </div>
+
+        <!-- 6 dense KPIs -->
+        <div class="kpi-row">
+          <div class="kpi">
+            <div class="l">Catalog screens</div>
+            <div class="v tnum" id="k-screens">—</div>
+            <div class="m" id="k-screens-meta"></div>
+            <svg class="spark" id="spark-screens"></svg>
+          </div>
+          <div class="kpi">
+            <div class="l">Total runs</div>
+            <div class="v tnum" id="k-runs">—</div>
+            <div class="m" id="k-runs-meta"></div>
+            <svg class="spark" id="spark-runs"></svg>
+          </div>
+          <div class="kpi">
+            <div class="l">Pass rate (20)</div>
+            <div class="v tnum" id="k-pass">—<span class="u">%</span></div>
+            <div class="m" id="k-pass-meta"></div>
+            <svg class="spark" id="spark-pass"></svg>
+          </div>
+          <div class="kpi">
+            <div class="l">Avg duration</div>
+            <div class="v tnum" id="k-time">—</div>
+            <div class="m" id="k-time-meta"></div>
+            <svg class="spark" id="spark-time"></svg>
+          </div>
+          <div class="kpi">
+            <div class="l">Coverage</div>
+            <div class="v tnum" id="k-cov">—<span class="u">%</span></div>
+            <div class="m" id="k-cov-meta"></div>
+            <svg class="spark" id="spark-cov"></svg>
+          </div>
+          <div class="kpi">
+            <div class="l">Active runs</div>
+            <div class="v tnum" id="k-active">0</div>
+            <div class="m"><span class="status success"><span class="dot"></span>Operational</span></div>
+            <svg class="spark"></svg>
+          </div>
+        </div>
+
+        <!-- Row 1: Pass-rate line chart + Insights -->
+        <div class="dash-grid">
+          <div class="tile">
+            <div class="tile-h">
+              <div><h2 class="t">Pass rate over time</h2><div class="s">Last 30 runs</div></div>
+              <div class="ac"><span class="tag tag-blue">PASS</span><span class="tag tag-red">FAIL</span></div>
+            </div>
+            <div class="tile-b">
+              <svg class="chart" id="chart-passrate"></svg>
+            </div>
+          </div>
+          <div class="tile">
+            <div class="tile-h">
+              <div><h2 class="t">Insights</h2><div class="s">Auto-generated from recent activity</div></div>
+            </div>
+            <div class="tile-b flush">
+              <div class="insights" id="insights-list"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 2: Quick actions + Mode mix + Coverage by type -->
+        <div class="dash-grid-3">
+          <div class="tile">
+            <div class="tile-h"><div><h2 class="t">Quick actions</h2></div></div>
+            <div class="tile-b flush">
+              <div class="qa-list">
+                <a href="#/new?preset=single" class="qa-row">
+                  <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg></div>
+                  <div><div class="t">Test one screen</div><div class="d">Deep coverage of a single screen</div></div>
+                  <div class="arrow"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></div>
+                </a>
+                <a href="#/new?preset=bulk" class="qa-row">
+                  <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
+                  <div><div class="t">Bulk auto-test</div><div class="d">Regression across many screens</div></div>
+                  <div class="arrow"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></div>
+                </a>
+                <a href="#/new?preset=catalog" class="qa-row">
+                  <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>
+                  <div><div class="t">Rebuild catalog</div><div class="d">After a Stratus release</div></div>
+                  <div class="arrow"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></div>
+                </a>
+                <a href="#/new?preset=api" class="qa-row">
+                  <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></div>
+                  <div><div class="t">API smoke test</div><div class="d">5-sec CI-friendly check</div></div>
+                  <div class="arrow"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></div>
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <div class="tile">
+            <div class="tile-h"><div><h2 class="t">Mode mix</h2><div class="s">Run distribution by mode</div></div></div>
+            <div class="tile-b">
+              <div class="donut-wrap">
+                <svg id="donut" width="140" height="140"></svg>
+                <div class="donut-legend" id="donut-legend"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="tile">
+            <div class="tile-h"><div><h2 class="t">Coverage by type</h2><div class="s">Tested vs untested</div></div></div>
+            <div class="tile-b">
+              <div id="cov-by-type"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent activity table -->
+        <div class="tile">
+          <div class="tile-h">
+            <div><h2 class="t">Recent runs</h2><div class="s">Last 10 — click report to drill down</div></div>
+            <div class="ac"><a href="#/runs" class="btn btn-ghost btn-sm">View all →</a></div>
+          </div>
+          <div class="tile-b flush" id="dash-runs-table"></div>
+        </div>
+      </section>
+
+      <!-- ========== NEW TEST RUN ========== -->
+      <section class="view hidden" data-view="new">
+        <div class="ph">
+          <div>
+            <h1 class="ph-title">New test run</h1>
+            <p class="ph-sub">Configure once, run anywhere. Defaults are smart.</p>
+          </div>
+        </div>
+
+        <div class="tile">
+
+          <div class="form-section">
+            <h3 class="h">Environment</h3>
+            <p class="sub">Where to run the tests against.</p>
+            <div class="flex gap-2 mb-3" style="flex-wrap:wrap">
+              <select id="env-select" style="min-width:240px"><option value="">— select a saved env —</option></select>
+              <button class="btn" id="env-save">Save current as…</button>
+              <a href="#/env" class="btn btn-ghost">Manage</a>
+            </div>
+            <div class="flex gap-2" style="flex-wrap:wrap">
+              <input type="url" id="url" placeholder="https://your-stratus-host/backoffice/?mid=100" style="flex:1; min-width:280px">
+              <input type="text" id="user" placeholder="Username" style="width:140px">
+              <input type="password" id="password" placeholder="Password" style="width:140px">
+              <input type="text" id="machine_id" placeholder="Machine ID (auto)" style="width:140px">
+            </div>
+            <div class="flex gap-2 mt-2">
+              <button class="btn btn-sm" id="btn-test-conn">Test connection</button>
+              <span id="conn-status" class="muted text-xs" style="align-self:center"></span>
+            </div>
+            <div id="conn-result"></div>
+          </div>
+
+          <div class="form-section">
+            <h3 class="h">What do you want to test?</h3>
+            <p class="sub">Pick the closest match. Advanced modes are hidden until you need them.</p>
+            <div class="mode-grid">
+              <label class="mode-tile">
+                <input type="radio" name="mode" value="single">
+                <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg></div>
+                <div class="name">One screen <span class="tag tag-blue">Recommended</span></div>
+                <div class="desc">Deep test of one screen. Tool auto-runs ~10–25 tests.</div>
+                <div class="meta">≈ 5 min · catalog-driven</div>
+              </label>
+              <label class="mode-tile">
+                <input type="radio" name="mode" value="bulk">
+                <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
+                <div class="name">Many screens</div>
+                <div class="desc">Pick any subset (or all 239). Nightly regression / pre-release.</div>
+                <div class="meta">≈ 3–6 hrs · catalog-driven</div>
+              </label>
+              <label class="mode-tile">
+                <input type="radio" name="mode" value="catalog">
+                <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>
+                <div class="name">Rebuild catalog</div>
+                <div class="desc">Re-scan Stratus to learn new/changed screens.</div>
+                <div class="meta">≈ 10–15 min · setup</div>
+              </label>
+              <label class="mode-tile">
+                <input type="radio" name="mode" value="api">
+                <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></div>
+                <div class="name">API smoke <span class="tag tag-cyan">For CI</span></div>
+                <div class="desc">No browser. Hits <code>/stratus</code> JSON endpoint directly.</div>
+                <div class="meta">≈ 5 sec · backend only</div>
+              </label>
+            </div>
+
+            <details class="adv">
+              <summary>Advanced (crawl from menu, debug, legacy demo flows)</summary>
+              <div class="adv-body">
+                <div class="mode-grid">
+                  <label class="mode-tile">
+                    <input type="radio" name="mode" value="crawl">
+                    <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/></svg></div>
+                    <div class="name">Crawl from live menu</div>
+                    <div class="desc">Like Bulk but discovers screens from live menu.</div>
+                  </label>
+                  <label class="mode-tile">
+                    <input type="radio" name="mode" value="diagnose">
+                    <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+                    <div class="name">Diagnose <span class="tag tag-warm">Debug</span></div>
+                    <div class="desc">No assertions — dumps HTML + screenshots.</div>
+                  </label>
+                  <label class="mode-tile">
+                    <input type="radio" name="mode" value="full">
+                    <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
+                    <div class="name">Full demo <span class="tag">Legacy</span></div>
+                    <div class="desc">Original Customer-only demo.</div>
+                  </label>
+                  <label class="mode-tile">
+                    <input type="radio" name="mode" value="readonly">
+                    <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+                    <div class="name">Read-only <span class="tag">Legacy</span></div>
+                    <div class="desc">Full demo without writes.</div>
+                  </label>
+                </div>
+              </div>
+            </details>
+          </div>
+
+          <div class="form-section" id="opts-single" style="display:none">
+            <h3 class="h">Pick a screen</h3>
+            <p class="sub">Filter by type, then choose.</p>
+            <div class="flex gap-2" style="flex-wrap:wrap">
+              <select id="single_type_filter" style="width:180px">
+                <option value="">All types</option>
+                <option value="list">List</option>
+                <option value="detail">Detail</option>
+                <option value="report">Report</option>
+                <option value="wizard">Wizard</option>
+                <option value="other">Other</option>
+              </select>
+              <!-- Searchable combobox — replaces a native <select> because
+                   typing through 239 options is painful. The hidden input
+                   #single_screenname is what the form submit reads. -->
+              <div class="combo" id="single-combo" style="flex:1; min-width:280px">
+                <input type="hidden" id="single_screenname" value="">
+                <button class="combo-trigger" type="button" id="single-combo-btn">
+                  <span class="combo-value" id="single-combo-value">— choose screen —</span>
+                  <svg class="combo-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div class="combo-panel hidden" id="single-combo-panel">
+                  <div class="combo-search-wrap">
+                    <svg class="combo-search-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" class="combo-search" id="single-combo-search" placeholder="Search screens…" autocomplete="off">
+                    <span class="combo-count" id="single-combo-count"></span>
+                  </div>
+                  <div class="combo-list" id="single-combo-list"></div>
+                </div>
+              </div>
+            </div>
+            <label class="checkbox mt-3"><input type="checkbox" id="single_safe" checked> Safe mode — skip destructive Save/Delete</label>
+
+            <!-- Download the auto-generated tests for the picked screen as an
+                 editable YAML the user can tweak and re-upload below. -->
+            <div class="flex gap-2 mt-3 items-center" style="flex-wrap:wrap">
+              <button class="btn btn-sm" id="btn-download-yaml" type="button" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download test YAML
+              </button>
+              <span class="muted text-xs" id="yaml-hint">Pick a screen first — then download its tests, edit, and re-upload below.</span>
+            </div>
+
+            <details class="adv">
+              <summary>Add / paste custom test cases (YAML)</summary>
+              <div class="adv-body">
+                <div class="flex gap-2 mb-3 items-center" style="flex-wrap:wrap">
+                  <input type="file" id="yaml-upload" accept=".yaml,.yml" style="font-size:12px">
+                  <button class="btn btn-sm" id="btn-load-downloaded" type="button" disabled title="Load the picked screen's auto-tests into the editor so you can tweak them">Load this screen's tests into editor</button>
+                  <button class="btn btn-sm btn-ghost" id="btn-clear-yaml" type="button">Clear</button>
+                </div>
+                <!-- Excel importer — converts test-case .xlsx files into YAML.
+                     Two paths: official template (100% clean) and legacy prose
+                     (regex-translated; unmappable steps become todo markers). -->
+                <div style="padding:10px 12px; background:var(--c-surface-2); border-left:3px solid var(--c-brand); margin-bottom:12px">
+                  <div class="flex gap-2 items-center mb-2" style="flex-wrap:wrap">
+                    <span class="text-xs fw-600">Import from Excel:</span>
+                    <input type="file" id="xlsx-import" accept=".xlsx,.xlsm" style="font-size:12px">
+                    <span class="spc flex-1"></span>
+                    <a class="btn btn-sm" href="/api/template/xlsx" title="Official template — fill it for 100% clean YAML">⬇ Template .xlsx</a>
+                    <a class="btn btn-sm btn-ghost" href="/api/template/csv" title="Same template as CSV — import into Google Sheets via File → Import → Replace">⬇ Template .csv (Sheets)</a>
+                  </div>
+                  <div class="muted text-xs mb-2">
+                    Drop any test-case Excel — the importer auto-detects the
+                    official 10-column template (perfect YAML) or falls back
+                    to translating prose with regex.
+                  </div>
+                  <div id="xlsx-status" class="text-xs"></div>
+                </div>
+                <textarea id="single_custom_yaml" rows="10" style="width:100%"
+                          placeholder="tests:&#10;  - screen: customerlist&#10;    name: 'My extra test'&#10;    steps: []"></textarea>
+                <p class="muted text-xs mt-2">Custom tests run <b>after</b> the auto-generated ones. Re-uploading an edited download <b>replaces</b> the auto-tests with your version for that screen.</p>
+              </div>
+            </details>
+          </div>
+
+          <div class="form-section" id="opts-bulk" style="display:none">
+            <h3 class="h">Pick screens</h3>
+            <p class="sub">Type filters + search + multi-select.</p>
+            <div class="flex gap-2 mb-3" style="flex-wrap:wrap">
+              <input id="screens_search" type="text" placeholder="Search…" style="flex:1; min-width:200px">
+              <button class="btn btn-sm" id="btn_select_all">Select visible</button>
+              <button class="btn btn-sm" id="btn_select_none">Clear</button>
+              <button class="btn btn-sm" id="btn_select_invert">Invert</button>
+            </div>
+            <div class="flex gap-3 mb-3" style="flex-wrap:wrap">
+              <label class="checkbox"><input type="checkbox" class="crawl-type" value="list" checked> List</label>
+              <label class="checkbox"><input type="checkbox" class="crawl-type" value="detail" checked> Detail</label>
+              <label class="checkbox"><input type="checkbox" class="crawl-type" value="report" checked> Report</label>
+              <label class="checkbox"><input type="checkbox" class="crawl-type" value="wizard"> Wizard</label>
+              <label class="checkbox"><input type="checkbox" class="crawl-type" value="other"> Other</label>
+            </div>
+            <div class="sp-list" id="screens-picker"><div class="empty-state"><p>Catalog not loaded yet.</p></div></div>
+            <div class="flex gap-3 mt-3" style="flex-wrap:wrap">
+              <input id="bulk_max" type="number" placeholder="Max screens" style="width:180px">
+              <label class="checkbox"><input type="checkbox" id="bulk_safe" checked> Safe mode</label>
+            </div>
+          </div>
+
+          <div class="form-section" id="opts-catalog" style="display:none">
+            <h3 class="h">Catalog scope</h3>
+            <p class="sub">Leave blank to scan everything (recommended).</p>
+            <div class="flex gap-2" style="flex-wrap:wrap">
+              <input id="catalog_scope" type="text" placeholder="Filter (e.g. customer) — blank = all">
+              <input id="catalog_max" type="number" placeholder="Max screens" style="width:160px">
+            </div>
+            <div class="banner mt-3">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              A full scan visits every screen (~10–15 min). Required before Single / Bulk modes.
+            </div>
+          </div>
+
+          <!-- Carbon-style modal-footer pair of full-height buttons -->
+          <div class="modal-f">
+            <a href="#/dashboard" class="btn">Cancel</a>
+            <button class="btn btn-primary" id="btn-start">
+              Start test
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== RUN PROGRESS ========== -->
+      <section class="view hidden" data-view="run">
+        <div class="ph">
+          <div class="flex items-center gap-3">
+            <span class="status running" id="run-status-pill"><span class="dot"></span><span id="run-title">Test running…</span></span>
+          </div>
+          <div class="ph-actions">
+            <button class="btn" id="btn-stop">Stop</button>
+            <a class="btn" id="btn-report" href="/report.html" target="_blank">Open report</a>
+            <a class="btn btn-primary" href="#/new" id="btn-new-run">New run</a>
+          </div>
+        </div>
+
+        <div class="run-grid">
+          <div class="log" id="live-log"></div>
+          <div>
+            <div class="stat-row">
+              <div class="stat-cell"><div class="l">Elapsed</div><div class="v tnum" id="rs-elapsed">0s</div></div>
+              <div class="stat-cell"><div class="l">Steps</div><div class="v tnum" id="rs-steps">0</div></div>
+              <div class="stat-cell"><div class="l">Passed</div><div class="v tnum" style="color:var(--c-success)" id="rs-pass">0</div></div>
+              <div class="stat-cell"><div class="l">Failed</div><div class="v tnum" style="color:var(--c-danger)" id="rs-fail">0</div></div>
+            </div>
+            <div class="tile mt-3" id="run-shot-card" style="display:none">
+              <div class="tile-h"><div><h2 class="t">Latest screenshot</h2></div></div>
+              <div class="tile-b" id="run-shot-body"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== RUN HISTORY ========== -->
+      <section class="view hidden" data-view="runs">
+        <div class="ph">
+          <div>
+            <h1 class="ph-title">Run history</h1>
+            <p class="ph-sub">All past test runs.</p>
+          </div>
+          <div class="ph-actions"><a href="#/new" class="btn btn-primary">New run</a></div>
+        </div>
+        <div class="tile">
+          <div class="toolbar">
+            <input id="runs-search" type="text" placeholder="Filter by URL or mode…">
+            <div class="div"></div>
+            <span class="muted text-xs" id="runs-count-label">—</span>
+            <div class="spc"></div>
+          </div>
+          <div id="runs-table"></div>
+        </div>
+      </section>
+
+      <!-- ========== CATALOG ========== -->
+      <section class="view hidden" data-view="catalog">
+        <div class="ph">
+          <div>
+            <h1 class="ph-title">Screen catalog</h1>
+            <p class="ph-sub" id="catalog-meta">—</p>
+          </div>
+          <div class="ph-actions"><a href="#/new?preset=catalog" class="btn">Rebuild</a></div>
+        </div>
+        <div class="tile">
+          <div class="toolbar">
+            <input id="catalog-search" type="text" placeholder="Filter screens…">
+            <div class="div"></div>
+            <label class="checkbox"><input type="checkbox" class="cat-type" value="list" checked> List</label>
+            <label class="checkbox"><input type="checkbox" class="cat-type" value="detail" checked> Detail</label>
+            <label class="checkbox"><input type="checkbox" class="cat-type" value="report" checked> Report</label>
+            <label class="checkbox"><input type="checkbox" class="cat-type" value="wizard" checked> Wizard</label>
+            <label class="checkbox"><input type="checkbox" class="cat-type" value="other" checked> Other</label>
+            <div class="spc"></div>
+            <span class="muted text-xs" id="catalog-count-label">—</span>
+          </div>
+          <div id="catalog-table"></div>
+        </div>
+      </section>
+
+      <!-- ========== YAML CONVERTER ========== -->
+      <section class="view hidden" data-view="converter">
+        <div class="ph">
+          <div>
+            <h1 class="ph-title">YAML converter</h1>
+            <p class="ph-sub">Upload a test-case Excel → download a runnable YAML. No screen pick needed — the template carries the Screen column on every row.</p>
+          </div>
+          <div class="ph-actions">
+            <a href="/api/template/xlsx" class="btn">⬇ Template (.xlsx)</a>
+            <a href="/api/template/csv" class="btn btn-ghost">⬇ Template (.csv)</a>
+          </div>
+        </div>
+
+        <!-- Drop zone -->
+        <div class="tile mb-5">
+          <div class="form-section" id="conv-drop"
+               style="text-align:center; cursor:pointer; padding:48px 20px;
+                      border:2px dashed var(--c-border-2); background:var(--c-surface-2)">
+            <div style="font-size:42px; line-height:1; color:var(--c-text-3); margin-bottom:8px">📂</div>
+            <div class="text-lg fw-600" style="margin-bottom:4px">Drop your Excel here, or click to choose</div>
+            <div class="muted text-xs">.xlsx · .xlsm — both the official template and legacy Celerant prose files are supported.</div>
+            <input type="file" id="conv-file" accept=".xlsx,.xlsm" style="display:none">
+          </div>
+        </div>
+
+        <!-- Result -->
+        <div class="tile" id="conv-result" style="display:none">
+          <div class="tile-h">
+            <div>
+              <h2 class="t" id="conv-result-title">Result</h2>
+              <div class="s" id="conv-result-sub"></div>
+            </div>
+            <div class="ac" id="conv-result-actions"></div>
+          </div>
+          <div class="tile-b">
+            <textarea id="conv-yaml" rows="22" style="width:100%; font-family:var(--f-mono); font-size:12px"></textarea>
+          </div>
+        </div>
+
+        <!-- Format guide — printable -->
+        <div class="tile mt-5">
+          <div class="tile-h">
+            <div>
+              <h2 class="t">Test-case format guide</h2>
+              <div class="s">Hand this to your QAs — the only format that gives 100% perfect YAML.</div>
+            </div>
+            <div class="ac">
+              <button class="btn btn-sm" id="btn-print-guide" type="button">🖨 Print</button>
+            </div>
+          </div>
+          <div class="tile-b" id="format-guide">
+            <h3 style="margin:0 0 4px; font-size:16px">The 10-column template</h3>
+            <p class="muted text-xs" style="margin:0 0 12px">
+              Fill one row per <b>step</b>, not one row per scenario. Repeat the TC ID + Scenario columns on every step row of the same test.
+            </p>
+            <table class="dt" style="margin-bottom:18px">
+              <thead><tr>
+                <th style="width:90px">Column</th>
+                <th style="width:80px">Required</th>
+                <th>Example</th>
+                <th>Notes</th>
+              </tr></thead>
+              <tbody>
+                <tr><td><b>TC ID</b></td>     <td>Yes</td><td><code>TC-CUST-001</code></td>      <td>Stable ID — survives reorders</td></tr>
+                <tr><td><b>Scenario</b></td>  <td>Yes</td><td>Customer search by Last Name</td>  <td>Group label, repeated per step</td></tr>
+                <tr><td><b>Screen</b></td>    <td>Yes</td><td><code>customerlist</code></td>     <td>Must match a catalog screenname</td></tr>
+                <tr><td><b>Step</b></td>      <td>Yes</td><td>1, 2, 3</td>                       <td>Per-scenario order</td></tr>
+                <tr><td><b>Action</b></td>    <td>Yes</td><td><code>click</code>, <code>fill</code>…</td><td>Pick from dropdown</td></tr>
+                <tr><td><b>Target</b></td>    <td>If applicable</td><td><code>#Search</code> · "Last Name" · Save</td><td>Element id, label, or button text</td></tr>
+                <tr><td><b>Value</b></td>     <td>For fill/select</td><td>QA · Active</td>       <td>What's typed/chosen</td></tr>
+                <tr><td><b>Expected</b></td>  <td>Optional</td><td>5 results shown</td>          <td>Comment only — not asserted</td></tr>
+                <tr><td><b>Priority</b></td>  <td>Optional</td><td>P1, P2, P3</td>               <td>For filtering</td></tr>
+                <tr><td><b>Notes</b></td>     <td>Optional</td><td>Verify TB_X.STATUS manually</td><td>YAML comment</td></tr>
+              </tbody>
+            </table>
+
+            <h3 style="margin:18px 0 4px; font-size:16px">Allowed actions</h3>
+            <table class="dt">
+              <thead><tr>
+                <th>Action</th><th>When to use</th><th>Target</th><th>Value</th>
+              </tr></thead>
+              <tbody>
+                <tr><td><code>click</code></td>           <td>Click a button or link</td>          <td><code>#buttonId</code> · "Save" · New</td><td>(blank)</td></tr>
+                <tr><td><code>fill</code></td>            <td>Enter text into a field</td>         <td><code>#fieldId</code> · "Last Name"</td><td>the value</td></tr>
+                <tr><td><code>select</code></td>          <td>Pick from a dropdown</td>            <td><code>#fieldId</code> · label</td>    <td>option label</td></tr>
+                <tr><td><code>open_search</code></td>     <td>Reveal search criteria pane</td>     <td>(blank)</td>                          <td>(blank)</td></tr>
+                <tr><td><code>wait</code></td>            <td>Pause N seconds</td>                 <td>N (e.g. 2)</td>                       <td>(blank)</td></tr>
+                <tr><td><code>assert_visible</code></td>  <td>Element must be visible</td>        <td><code>#element</code> · "text"</td>   <td>(blank)</td></tr>
+                <tr><td><code>assert_text</code></td>     <td>Page must contain text</td>         <td>(blank)</td>                          <td>exact text</td></tr>
+                <tr><td><code>assert_no_errors</code></td><td>No error words on page</td>        <td>(blank)</td>                          <td>(blank)</td></tr>
+                <tr><td><code>assert_rows_min</code></td> <td>Grid has at least N rows</td>       <td>(blank)</td>                          <td>N</td></tr>
+                <tr><td><code>assert_rows_max</code></td> <td>Grid has at most N rows</td>        <td>(blank)</td>                          <td>N</td></tr>
+                <tr><td><code>screenshot</code></td>      <td>Save a snapshot</td>                 <td>filename suffix</td>                 <td>(blank)</td></tr>
+              </tbody>
+            </table>
+
+            <h3 style="margin:18px 0 6px; font-size:16px">Worked example</h3>
+            <p class="muted text-xs" style="margin:0 0 8px">A real Customer-search test, written one row per step:</p>
+            <table class="dt">
+              <thead><tr><th>TC ID</th><th>Scenario</th><th>Screen</th><th>Step</th><th>Action</th><th>Target</th><th>Value</th></tr></thead>
+              <tbody>
+                <tr><td>TC-CUST-001</td><td>Customer search by Last Name</td><td>customerlist</td><td>1</td><td>open_search</td><td></td><td></td></tr>
+                <tr><td>TC-CUST-001</td><td>Customer search by Last Name</td><td>customerlist</td><td>2</td><td>fill</td><td>Last Name</td><td>Smith</td></tr>
+                <tr><td>TC-CUST-001</td><td>Customer search by Last Name</td><td>customerlist</td><td>3</td><td>click</td><td>Search</td><td></td></tr>
+                <tr><td>TC-CUST-001</td><td>Customer search by Last Name</td><td>customerlist</td><td>4</td><td>assert_no_errors</td><td></td><td></td></tr>
+              </tbody>
+            </table>
+            <p class="muted text-xs mt-3"><b>Produces this YAML:</b></p>
+            <pre style="background:var(--c-surface-2); padding:12px; border-left:3px solid var(--c-brand); font-size:11px; overflow:auto">tests:
+- screen: customerlist
+  name: Customer search by Last Name
+  steps:
+  - action: open_search
+  - action: fill
+    target: Last Name
+    value: Smith
+  - action: click
+    target: Search
+  - action: assert_no_errors</pre>
+
+            <h3 style="margin:18px 0 6px; font-size:16px">Tips</h3>
+            <ul class="text-xs muted" style="margin:0 0 8px 18px; line-height:1.7">
+              <li>Use <b>one row per step</b>, not one row per scenario. Repeat TC ID + Scenario on every step row.</li>
+              <li><b>Screen</b> must match a catalog screenname (e.g. <code>customerlist</code>, <code>receiptslist</code>, <code>shippingorderslist</code>).</li>
+              <li><b>Target</b> accepts <code>#id</code>, a label like "Last Name", or a button name like Save.</li>
+              <li><b>Empty Target/Value is fine</b> — actions like <code>open_search</code> or <code>assert_no_errors</code> don't need them.</li>
+              <li><b>Expected</b> is informational. Use <code>assert_visible</code>, <code>assert_text</code>, or <code>assert_no_errors</code> if you want it actually checked.</li>
+              <li>Step numbers within a scenario decide run order. Order across TC IDs doesn't matter.</li>
+            </ul>
+
+            <h3 style="margin:18px 0 6px; font-size:16px">Don't have the template? Legacy prose also works</h3>
+            <p class="muted text-xs">The converter will still try to translate free-prose Excel files like the ones already in circulation. Anything the regex can't map becomes a <code>todo</code> step that's preserved verbatim — the YAML still runs, the run log flags it, and a QA can edit the rest later. For 100% accuracy, use the template.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== ENVIRONMENTS ========== -->
+      <section class="view hidden" data-view="env">
+        <div class="ph">
+          <div>
+            <h1 class="ph-title">Environments</h1>
+            <p class="ph-sub">Saved Stratus connections.</p>
+          </div>
+        </div>
+        <div class="tile"><div id="env-table"></div></div>
+      </section>
+
+      <!-- ========== HELP ========== -->
+      <section class="view hidden" data-view="help">
+        <div class="ph">
+          <div>
+            <h1 class="ph-title">Mode glossary</h1>
+            <p class="ph-sub">Plain-English explanation of every test mode.</p>
+          </div>
+        </div>
+        <div class="tile"><div class="tile-b" id="help-body"></div></div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- ============== STATUS BAR (24px) ============== -->
+  <footer class="status-bar">
+    <span class="sb-item"><span class="dot"></span> System operational</span>
+    <span class="sb-item">Catalog: <b class="tnum" id="sb-catalog">—</b> screens</span>
+    <span class="sb-item">Last build: <span id="sb-built">—</span></span>
+    <span class="sb-item">Active env: <span id="sb-env">none</span></span>
+    <div class="sb-spacer"></div>
+    <span class="sb-item">v0.3</span>
+    <span class="sb-item"><kbd>⌘K</kbd> palette</span>
+    <span class="sb-item">UTC <span class="tnum" id="sb-clock">—</span></span>
+  </footer>
+</div>
+
+<!-- ============== MODALS ============== -->
+<div id="env-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-h">
+      <span>Save environment</span>
+      <button class="icon-btn" id="env-modal-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div class="modal-b">
+      <div class="field"><label>Profile name</label>
+        <input id="env-name" type="text" class="w-full" placeholder="e.g. Production, Staging">
+      </div>
+    </div>
+    <div class="modal-f">
+      <button class="btn" id="env-cancel">Cancel</button>
+      <button class="btn btn-primary" id="env-confirm">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="palette-overlay" class="modal-overlay hidden" style="align-items:flex-start; padding-top:14vh">
+  <div class="palette">
+    <input class="palette-input" id="palette-input" placeholder="Search screens, runs, navigation…" autocomplete="off">
+    <div class="palette-list" id="palette-list"></div>
+    <div class="palette-foot">
+      <span><kbd>↑↓</kbd> navigate</span>
+      <span><kbd>↵</kbd> open</span>
+      <span><kbd>esc</kbd> close</span>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

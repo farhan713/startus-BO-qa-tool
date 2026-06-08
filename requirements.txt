@@ -1,0 +1,33 @@
+# Stratus BackOffice QA Automation Framework
+
+# Core test runner
+pytest==8.3.3
+pytest-html==4.1.1
+pytest-xdist==3.6.1          # parallel execution
+pytest-rerunfailures==14.0   # auto-retry flaky UI tests
+
+# BDD layer
+pytest-bdd==7.3.0
+
+# UI automation
+playwright==1.48.0
+pytest-playwright==0.5.2
+
+# API layer
+requests==2.32.3
+jsonschema==4.23.0
+
+# Database layer (SQL Server)
+pyodbc==5.1.0
+sqlalchemy==2.0.35
+
+# Config + utils
+python-dotenv==1.0.1
+pyyaml==6.0.2
+
+# Reporting
+allure-pytest==2.13.5
+
+# Test data
+faker==30.3.0
+flask==3.0.3

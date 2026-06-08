@@ -1,0 +1,223 @@
+# ============================================================================
+#  Customer List — Demo Test Cases
+#  Stratus QA Tool — Custom YAML format
+# ============================================================================
+#
+#  Paste this whole file into the "Upload custom test cases (YAML)" box in
+#  either:
+#    - 🎯 Single Screen mode  (test the steps after the auto-tests)
+#    - 🌐 Crawl ALL mode      (mix with generic crawl across many screens)
+#
+#  Available actions (see "Format reference" in the UI for the full list):
+#    open_search        click "Show Search Criteria" if present
+#    fill               fill a field by id or name
+#    click              click element by id/name/text
+#    select             select a dropdown option by label
+#    wait               sleep N seconds (target=seconds)
+#    assert_visible     assert element visible
+#    assert_text        assert page body contains text
+#    assert_no_errors   assert no error words on page
+#    assert_rows_min    assert grid has >= N rows
+#    assert_rows_max    assert grid has <= N rows
+#    screenshot         capture screenshot
+#
+#  EVERY test below is independent — the tool reloads the page between
+#  tests so state from one doesn't leak into the next.
+# ============================================================================
+
+tests:
+
+  # ──────────────────────────────────────────────────────────────────────
+  # TEST 1 — Sanity: page loads, all key elements visible
+  # ──────────────────────────────────────────────────────────────────────
+  - screen: customerlist
+    name: "1️⃣  Sanity check — Customer List loads with all controls"
+    steps:
+      - { action: assert_no_errors }
+      - { action: assert_visible, target: "#topNav" }
+      - { action: assert_visible, target: "#New" }
+      - { action: assert_visible, target: "#Search" }
+      - { action: assert_visible, target: "#Reset" }
+      - { action: assert_visible, target: "#Close" }
+      - { action: assert_text,    target: "Customer" }
+      - { action: screenshot,     target: "01_page_loaded" }
+
+  # ──────────────────────────────────────────────────────────────────────
+  # TEST 2 — Search by Last Name (common QA scenario)
+  # ──────────────────────────────────────────────────────────────────────
+  - screen: customerlist
+    name: "2️⃣  Search by Last Name = SMITH"
+    steps:
+      - { action: open_search,      optional: true }
+      - { action: fill,             target: LastName, value: SMITH }
+      - { action: click,            target: Search }
+      - { action: wait,             target: 2 }
+      - { action: assert_no_errors }
+      - { action: screenshot,       target: "02_smith_search" }
+
+  # ──────────────────────────────────────────────────────────────────────
+  # TEST 3 — Combined search: last name + first name (narrows results)
+  # ──────────────────────────────────────────────────────────────────────
+  - screen: customerlist
+    name: "3️⃣  Combined search — SMITH + JOHN"
+    steps:
+      - { action: open_search,  optional: true }
+      - { action: fill,         target: LastName,  value: SMITH }
+      - { action: fill,         target: FirstName, value: JOHN }
+      - { action: click,        target: Search }
+      - { action: wait,         target: 2 }
+      - { action: assert_no_errors }
+      - { action: screenshot,   target: "03_john_smith" }
+
+  # ──────────────────────────────────────────────────────────────────────
+  # TEST 4 — Company filter (text search across company field)
+  # ──────────────────────────────────────────────────────────────────────
+  - screen: customerlist
+    name: "4️⃣  Company filter — CELERANT"
+    steps:
+      - { action: open_search,  optional: true }
+      - { action: fill,         target: Company, value: CELERANT }
+      - { action: click,        target: Search }
+      - { action: wait,         target: 2 }
+      - { action: assert_no_errors }
+      - { action: assert_text,  target: "CELERANT" }
+      - { action: screenshot,   target: "04_celerant_company" }
+
+  # ──────────────────────────────────────────────────────────────────────
+  # TEST 5 — Dropdown filter: pick a specific store
+  # ──────────────────────────────────────────────────────────────────────
+  - screen: customerlist
+    name: "5️⃣  Filter by Store dropdown"
+    steps:
+      - { action: open_search,  optional: true }
+      - { action: select,       target: STORE, value: "3 - CELERANT Outdoors, Inc." }
+      - { action: click,        target: Search }
+      - { action: wait,         target: 2 }
+      - { action: assert_no_errors }
+      - { action: screenshot,   target: "05_store_filter" }
+
+  # ──────────────────────────────────────────────────────────────────────
+  # TEST 6 — Date range filter
+  # ──────────────────────────────────────────────────────────────────────
+  - screen: customerlist
+    name: "6️⃣  Last Sale = TODAY"
+    steps:
+      - { action: open_search,  optional: true }
+      - { action: select,       target: Date_1_1, value: "TODAY" }
+      - { action: click,        target: Search }
+      - { action: wait,         target: 2 }
+      - { action: assert_no_errors }
+      - { action: screenshot,   target: "06_today_filter" }
+
+  # ──────────────────────────────────────────────────────────────────────
+  # TEST 7 — Multi-criteria: customer type dropdown
+  # ──────────────────────────────────────────────────────────────────────
+  - screen: customerlist
+    name: "7️⃣  Customer Type filter — EMPLOYEE"
+    steps:
+      - { action: open_search,  optional: true }
+      - { action: select,       target: CUST_TYPE, value: "EMPLOYEE" }
+      - { action: click,        target: Search }
+      - { action: wait,         target: 2 }
+      - { action: assert_no_errors }
+      - { action: screenshot,   target: "07_employee_type" }
+
+  # ──────────────────────────────────────────────────────────────────────
+  # TEST 8 — Checkbox filter: "On Account" customers only
+  # ──────────────────────────────────────────────────────────────────────
+  - screen: customerlist
+    name: "8️⃣  On Account Customer checkbox filter"
+    steps:
+      - { action: open_search,  optional: true }
+      - { action: click,        target: OnAccountCustomerID, optional: true }
+      - { action: click,        target: Search }
+      - { action: wait,         target: 2 }
+      - { action: assert_no_errors }
+      - { action: screenshot,   target: "08_on_account" }
+
+  # ──────────────────────────────────────────────────────────────────────
+  # TEST 9 — Reset clears the form
+  # ──────────────────────────────────────────────────────────────────────
+  - screen: customerlist
+    name: "9️⃣  Reset clears search filters"
+    steps:
+      - { action: open_search,  optional: true }
+      - { action: fill,         target: LastName, value: SMITH }
+      - { action: click,        target: Reset }
+      - { action: wait,         target: 1 }
+      - { action: assert_no_errors }
+      - { action: screenshot,   target: "09_reset" }
+
+  # ──────────────────────────────────────────────────────────────────────
+  # TEST 10 — Open Action dropdown and verify items
+  # ──────────────────────────────────────────────────────────────────────
+  - screen: customerlist
+    name: "🔟 Action menu exposes Edit / Delete / Print"
+    steps:
+      - { action: click,        target: Action }
+      - { action: wait,         target: 1 }
+      - { action: assert_no_errors }
+      - { action: screenshot,   target: "10_action_menu" }
+
+  # ──────────────────────────────────────────────────────────────────────
+  # TEST 11 — Print List action triggers (no error)
+  # ──────────────────────────────────────────────────────────────────────
+  - screen: customerlist
+    name: "1️⃣1️⃣ Print List action"
+    steps:
+      - { action: click,        target: Action }
+      - { action: wait,         target: 1 }
+      - { action: click,        target: PrintList }
+      - { action: wait,         target: 3 }
+      - { action: assert_no_errors }
+      - { action: screenshot,   target: "11_print_triggered" }
+
+  # ──────────────────────────────────────────────────────────────────────
+  # TEST 12 — Click New (opens the detail form)
+  # ──────────────────────────────────────────────────────────────────────
+  - screen: customerlist
+    name: "1️⃣2️⃣ Click New opens Customer Detail form"
+    steps:
+      - { action: click,        target: New }
+      - { action: wait,         target: 4 }
+      - { action: assert_no_errors }
+      - { action: screenshot,   target: "12_new_detail_form" }
+
+  # ──────────────────────────────────────────────────────────────────────
+  # TEST 13 — Long string boundary test (max-length stress)
+  # ──────────────────────────────────────────────────────────────────────
+  - screen: customerlist
+    name: "1️⃣3️⃣ Boundary — very long last name string"
+    steps:
+      - { action: open_search,  optional: true }
+      - { action: fill,         target: LastName, value: "ABCDEFGHIJKLMNOPQRSTUVWXYZ12345" }
+      - { action: click,        target: Search }
+      - { action: wait,         target: 2 }
+      - { action: assert_no_errors }
+      - { action: screenshot,   target: "13_long_string" }
+
+  # ──────────────────────────────────────────────────────────────────────
+  # TEST 14 — Special-character search (SQL injection style)
+  # ──────────────────────────────────────────────────────────────────────
+  - screen: customerlist
+    name: "1️⃣4️⃣ Security — special characters in search field"
+    steps:
+      - { action: open_search,  optional: true }
+      - { action: fill,         target: LastName, value: "' OR 1=1 --" }
+      - { action: click,        target: Search }
+      - { action: wait,         target: 2 }
+      - { action: assert_no_errors }
+      - { action: screenshot,   target: "14_sql_injection_attempt" }
+
+  # ──────────────────────────────────────────────────────────────────────
+  # TEST 15 — Unicode search
+  # ──────────────────────────────────────────────────────────────────────
+  - screen: customerlist
+    name: "1️⃣5️⃣ Internationalization — unicode characters"
+    steps:
+      - { action: open_search,  optional: true }
+      - { action: fill,         target: LastName, value: "中文测试 ñoño" }
+      - { action: click,        target: Search }
+      - { action: wait,         target: 2 }
+      - { action: assert_no_errors }
+      - { action: screenshot,   target: "15_unicode" }
