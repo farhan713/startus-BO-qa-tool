@@ -538,6 +538,32 @@
           </div>
         </div>
 
+        <!-- Conversion instructions (prompt engine) -->
+        <div class="tile mb-3">
+          <div class="form-section">
+            <div class="flex items-center justify-between mb-2" style="flex-wrap:wrap; gap:8px">
+              <h3 class="h" style="margin:0">Conversion instructions <span class="muted text-xs" style="font-weight:400">(optional)</span></h3>
+              <span class="muted text-xs" id="conv-llm-status">Checking AI status…</span>
+            </div>
+            <p class="sub" style="margin:0 0 10px">
+              Write naturally — typos, politeness, and casual phrasing are tolerated.
+              Click a chip to add a canonical instruction, or type your own.
+            </p>
+            <!-- Quick-add chips: clicking inserts the canonical phrasing -->
+            <div id="conv-chips" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px"></div>
+            <textarea id="conv-prompt" rows="5" style="width:100%; font-family:var(--f-sans); font-size:13px"
+              placeholder="Type instructions in plain English. Examples:&#10;  • all tests on customerlist&#10;  • use 'John Smith' for {{customer}}&#10;  • screenshot after every click&#10;  • skip P3&#10;  • make these tests more thorough (needs AI)"></textarea>
+            <div class="flex items-center gap-2 mt-2" style="flex-wrap:wrap">
+              <label class="checkbox" id="conv-llm-toggle-wrap" style="opacity:.5">
+                <input type="checkbox" id="conv-use-llm" disabled>
+                <span>✨ Use AI (Gemini) for prompts the rule engine can't handle</span>
+              </label>
+              <span class="spc flex-1"></span>
+              <a href="#/help" class="muted text-xs">What can rules do? →</a>
+            </div>
+          </div>
+        </div>
+
         <!-- Drop zone -->
         <div class="tile mb-5">
           <div class="form-section" id="conv-drop"
@@ -548,6 +574,14 @@
             <div class="muted text-xs">.xlsx · .xlsm — both the official template and legacy Celerant prose files are supported.</div>
             <input type="file" id="conv-file" accept=".xlsx,.xlsm" style="display:none">
           </div>
+        </div>
+
+        <!-- Prompt transparency panel — populated after conversion if a prompt was used -->
+        <div class="tile mb-5" id="conv-prompt-panel" style="display:none">
+          <div class="tile-h">
+            <div><h2 class="t">Prompt applied</h2><div class="s">What the rule engine + AI did with your instructions</div></div>
+          </div>
+          <div class="tile-b" id="conv-prompt-body"></div>
         </div>
 
         <!-- Result -->

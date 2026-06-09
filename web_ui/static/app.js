@@ -909,7 +909,62 @@ document.addEventListener("change", async e => {
 // ===========================================================================
 let _convLastFile = null;
 
+// Canonical chips for the prompt textarea — clicking inserts the phrasing.
+// `ai: true` chips visually call out that AI must be enabled.
+const PROMPT_CHIPS = [
+  { label: "All tests on <screen>",        text: "all tests on customerlist" },
+  { label: "Screenshot after every click", text: "screenshot after every click" },
+  { label: "Screenshot after every fill",  text: "screenshot after every fill" },
+  { label: "Append assert_no_errors",      text: "append assert_no_errors" },
+  { label: "Skip P3",                      text: "skip P3" },
+  { label: "Wait 1s after every click",    text: "wait 1 second after every click" },
+  { label: "Use 'X' for {{var}}",          text: "use 'John Smith' for {{customer}}" },
+  { label: "Default value for X",          text: "default value for Last Name is 'QA'" },
+  { label: "Run each test 3 times",        text: "run each test 3 times" },
+  { label: "More thorough (AI)",           text: "make these tests more thorough with edge cases", ai: true },
+  { label: "Add negative cases (AI)",      text: "add negative test cases for invalid input", ai: true },
+];
+
+function renderPromptChips() {
+  const wrap = $("#conv-chips");
+  if (!wrap || wrap._wired) return;
+  wrap._wired = true;
+  wrap.innerHTML = PROMPT_CHIPS.map((c, i) =>
+    `<span class="prompt-chip ${c.ai ? "ai" : ""}" data-i="${i}" title="Click to add to the prompt">${escapeHTML(c.label)}</span>`
+  ).join("");
+  wrap.querySelectorAll(".prompt-chip").forEach(el => {
+    el.onclick = () => {
+      const chip = PROMPT_CHIPS[+el.dataset.i];
+      const ta = $("#conv-prompt");
+      // Append on a new line; trim trailing whitespace first
+      const cur = ta.value.replace(/\s+$/, "");
+      ta.value = (cur ? cur + "\n" : "") + chip.text;
+      // If user clicks an AI chip and AI is available, auto-enable the toggle
+      if (chip.ai && !$("#conv-use-llm").disabled) $("#conv-use-llm").checked = true;
+      ta.focus();
+      // Move cursor to end
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+    };
+  });
+}
+
 function renderConverter() {
+  renderPromptChips();
+  // Always refresh LLM status on view enter (fast endpoint)
+  fetch("/api/llm-status").then(r => r.json()).then(s => {
+    const label = $("#conv-llm-status");
+    const cb = $("#conv-use-llm");
+    const wrap = $("#conv-llm-toggle-wrap");
+    if (s.configured) {
+      const remaining = Math.max(0, s.daily_limit - s.used_today);
+      label.innerHTML = `<span class="status success"><span class="dot"></span>AI ready · ${s.model} · ${remaining} requests left today</span>`;
+      cb.disabled = false; wrap.style.opacity = "1";
+    } else {
+      label.innerHTML = `<span class="muted">AI not configured — set <code>GEMINI_API_KEY</code> in <code>qa-automation/.env</code> to enable</span>`;
+      cb.disabled = true; cb.checked = false; wrap.style.opacity = ".5";
+    }
+  }).catch(() => {});
+
   // First render: wire the drop zone + file picker exactly once.
   const drop = $("#conv-drop");
   if (!drop || drop._wired) return;
@@ -952,6 +1007,38 @@ function renderConverter() {
   };
 }
 
+function renderPromptPanel(summary) {
+  // Hide if no prompt was applied at all (no instructions submitted).
+  if (!summary || (!summary.applied?.length && !summary.ignored?.length && !summary.llm_used && !summary.llm_error)) {
+    $("#conv-prompt-panel").style.display = "none";
+    return;
+  }
+  const parts = [];
+  if (summary.applied?.length) {
+    parts.push(`<div style="margin-bottom:10px"><b style="color:var(--c-success)">✓ Applied ${summary.applied.length} rule${summary.applied.length === 1 ? "" : "s"}</b></div>`);
+    parts.push(`<ul style="margin:0 0 14px 18px; padding:0; font-size:13px; line-height:1.7">`);
+    for (const a of summary.applied) parts.push(`<li>${escapeHTML(a)}</li>`);
+    parts.push(`</ul>`);
+  }
+  if (summary.llm_used) {
+    parts.push(`<div style="margin-bottom:8px; padding:8px 12px; background:var(--c-brand-soft); border-left:3px solid var(--c-brand); font-size:13px">` +
+      `<b>✨ AI step ran</b> — ${summary.llm_changed ? "YAML was modified" : "no changes needed"}` +
+      `</div>`);
+  } else if (summary.llm_error) {
+    parts.push(`<div style="margin-bottom:8px; padding:8px 12px; background:var(--c-warning-bg); border-left:3px solid var(--c-warning); font-size:13px">` +
+      `<b>⚠ AI step skipped</b> — ${escapeHTML(summary.llm_error)}` +
+      `</div>`);
+  }
+  if (summary.ignored?.length) {
+    parts.push(`<div style="margin-bottom:6px"><b style="color:var(--c-warning)">⊘ Ignored ${summary.ignored.length} prompt line${summary.ignored.length === 1 ? "" : "s"}</b> <span class="muted">(too open-ended for the rule engine${summary.llm_used ? "; AI was given these" : "; enable ✨ AI to try them"})</span></div>`);
+    parts.push(`<ul style="margin:0 0 0 18px; padding:0; font-size:13px; color:var(--c-text-2); line-height:1.7">`);
+    for (const i of summary.ignored) parts.push(`<li><code>${escapeHTML(i)}</code></li>`);
+    parts.push(`</ul>`);
+  }
+  $("#conv-prompt-body").innerHTML = parts.join("");
+  $("#conv-prompt-panel").style.display = "";
+}
+
 async function convertExcel(file) {
   _convLastFile = file;
   const result = $("#conv-result");
@@ -960,16 +1047,23 @@ async function convertExcel(file) {
   $("#conv-result-sub").textContent = "";
   $("#conv-result-actions").innerHTML = "";
   $("#conv-yaml").value = "";
+  $("#conv-prompt-panel").style.display = "none";
 
   try {
     const form = new FormData();
     form.append("file", file);
     form.append("screen", "yourscreen");          // legacy fallback default
+    const promptText = ($("#conv-prompt") || {}).value || "";
+    const useLlm = ($("#conv-use-llm") || {}).checked || false;
+    if (promptText.trim()) form.append("prompt", promptText.trim());
+    if (useLlm) form.append("use_llm", "1");
+
     const r = await fetch("/api/import-testcases", { method: "POST", body: form });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || ("HTTP " + r.status));
 
     $("#conv-yaml").value = data.yaml;
+    renderPromptPanel(data.prompt);
     const n = (data.screens || []).length || 1;
 
     if (data.layout === "template") {
@@ -1028,6 +1122,12 @@ async function downloadZip() {
   const form = new FormData();
   form.append("file", _convLastFile);
   form.append("screen", "yourscreen");
+  // Forward the same prompt + AI toggle so the ZIP's per-screen YAMLs
+  // reflect the user's instructions, not just the raw import.
+  const promptText = ($("#conv-prompt") || {}).value || "";
+  const useLlm = ($("#conv-use-llm") || {}).checked || false;
+  if (promptText.trim()) form.append("prompt", promptText.trim());
+  if (useLlm) form.append("use_llm", "1");
   const r = await fetch("/api/import-testcases/zip", { method: "POST", body: form });
   if (!r.ok) { alert("ZIP failed: HTTP " + r.status); return; }
   const blob = await r.blob();

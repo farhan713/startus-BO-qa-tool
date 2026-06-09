@@ -16,12 +16,23 @@ Endpoints:
 from __future__ import annotations
 
 import json
+import os
 import queue
 import socket
 import sys
 import threading
 import time
 from dataclasses import asdict
+
+# Load qa-automation/.env into the process so optional integrations
+# (Gemini API key, etc.) are picked up automatically when launch.sh runs.
+try:
+    from dotenv import load_dotenv
+    _env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
+    if os.path.exists(_env_path):
+        load_dotenv(_env_path, override=False)
+except Exception:
+    pass
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
@@ -550,25 +561,43 @@ def _yaml_for_screen(entry: dict, safe_mode: bool = True) -> str:
 def api_import_testcases():
     """Accept an uploaded .xlsx of test cases and return YAML.
 
-    POST multipart form:  file=<xlsx>,  screen=<screenname>
-    Returns JSON: { yaml, layout, n_tests, n_steps_total, n_steps_translated,
-                    pct_translated, per_screen?, screens? }
+    POST multipart form:
+      file   = <xlsx>
+      screen = <screenname>     (default screen for legacy prose import)
+      prompt = <free-text>      (optional — applied via prompt engine)
+      use_llm = "1"/"0"         (opt-in Gemini refinement; requires API key)
 
-    For template-format files, `per_screen` is a {screen: yaml} dict and
-    `screens` lists every screen covered. The user can download one combined
-    YAML or fetch a ZIP of per-screen YAMLs via /api/import-testcases/zip.
+    Returns JSON: { yaml, layout, n_tests, n_steps_total, n_steps_translated,
+                    pct_translated, per_screen?, screens?, prompt? }
     """
     from framework.testcase_importer import import_xlsx
+    from framework.prompt_engine import apply_prompt
     if "file" not in request.files:
         return jsonify({"error": "no file uploaded"}), 400
     f = request.files["file"]
     screen = (request.form.get("screen") or "yourscreen").strip()
+    prompt = (request.form.get("prompt") or "").strip()
+    use_llm = (request.form.get("use_llm") or "").strip() in ("1", "true", "yes")
     try:
         res = import_xlsx(f.read(), screen=screen)
     except Exception as e:
         return jsonify({"error": f"import failed: {e}"}), 500
+
+    prompt_summary = None
+    yaml_out = res.yaml_text
+    if prompt:
+        pr = apply_prompt(yaml_out, prompt, use_llm=use_llm)
+        yaml_out = pr.yaml_text
+        prompt_summary = {
+            "applied":     pr.applied,
+            "ignored":     pr.ignored,
+            "llm_used":    pr.llm_used,
+            "llm_error":   pr.llm_error,
+            "llm_changed": pr.llm_changed,
+        }
+
     return jsonify({
-        "yaml": res.yaml_text,
+        "yaml": yaml_out,
         "layout": res.layout,
         "n_tests": res.n_tests,
         "n_steps_total": res.n_steps_total,
@@ -576,7 +605,15 @@ def api_import_testcases():
         "pct_translated": (100 * res.n_steps_translated // res.n_steps_total) if res.n_steps_total else 0,
         "per_screen": res.per_screen,
         "screens": res.screens,
+        "prompt": prompt_summary,
     })
+
+
+@app.route("/api/llm-status")
+def api_llm_status():
+    """Tell the UI whether Gemini is configured + today's usage."""
+    from framework.prompt_engine import llm_available
+    return jsonify(llm_available())
 
 
 @app.route("/api/import-testcases/zip", methods=["POST"])
@@ -589,19 +626,28 @@ def api_import_testcases_zip():
     import io as _io, zipfile
     if "file" not in request.files:
         return jsonify({"error": "no file uploaded"}), 400
+    from framework.prompt_engine import apply_prompt
     try:
         res = import_xlsx(request.files["file"].read(),
                           screen=(request.form.get("screen") or "yourscreen").strip())
     except Exception as e:
         return jsonify({"error": f"import failed: {e}"}), 500
 
+    prompt = (request.form.get("prompt") or "").strip()
+    use_llm = (request.form.get("use_llm") or "").strip() in ("1", "true", "yes")
+
     buf = _io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         if res.per_screen:
             for scr, yml in res.per_screen.items():
+                if prompt:
+                    yml = apply_prompt(yml, prompt, use_llm=use_llm).yaml_text
                 zf.writestr(f"{scr}_tests.yaml", yml)
         else:
-            zf.writestr("imported_tests.yaml", res.yaml_text)
+            yml = res.yaml_text
+            if prompt:
+                yml = apply_prompt(yml, prompt, use_llm=use_llm).yaml_text
+            zf.writestr("imported_tests.yaml", yml)
         # Index file so the QA knows what's in the zip
         idx = "Stratus QA — imported test cases\n\n"
         idx += f"Layout    : {res.layout}\n"

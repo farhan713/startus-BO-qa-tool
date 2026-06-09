@@ -893,6 +893,29 @@ label.checkbox input { accent-color: var(--c-brand); }
 .banner.danger { background: var(--c-danger-bg); border-left-color: var(--c-danger); }
 .banner.danger svg { color: var(--c-danger); }
 
+/* ---------- Prompt chips (YAML converter) ---------- */
+.prompt-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px;
+  font-size: var(--fs-12);
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border-2);
+  border-radius: 14px;
+  color: var(--c-text-2);
+  cursor: pointer;
+  user-select: none;
+  transition: all var(--t-fast);
+  font-family: var(--f-sans);
+}
+.prompt-chip:hover {
+  background: var(--c-brand-soft);
+  color: var(--c-brand);
+  border-color: var(--c-brand);
+}
+.prompt-chip::before { content: "+ "; opacity: 0.6; font-weight: 600; }
+.prompt-chip.ai { background: var(--c-warning-bg); color: var(--c-warning); border-color: #f7e5a8; }
+.prompt-chip.ai::before { content: "✨ "; opacity: 1; }
+
 /* ---------- COMBOBOX (searchable dropdown) ---------- */
 .combo { position: relative; }
 .combo-trigger {

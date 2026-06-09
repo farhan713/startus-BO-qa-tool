@@ -31,3 +31,6 @@ allure-pytest==2.13.5
 # Test data
 faker==30.3.0
 flask==3.0.3
+
+# AI (optional — rule engine works without this; Gemini path needs it)
+google-genai>=0.5.0
