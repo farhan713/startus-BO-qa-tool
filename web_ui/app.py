@@ -687,6 +687,243 @@ def api_template_csv():
                      download_name="Stratus-QA-TestCase-Template.csv")
 
 
+@app.route("/api/scenarios")
+def api_scenarios_list():
+    """List every saved scenario, newest first."""
+    from framework import scenario_store
+    return jsonify({
+        "scenarios": scenario_store.list_scenarios(),
+        "directory": scenario_store.load_directory(),
+    })
+
+
+@app.route("/api/scenarios", methods=["POST"])
+def api_scenarios_create():
+    """Save a new scenario. POST JSON body:
+       { id, title, description?, screen?, tags?, variables?, steps OR yaml,
+         author?, overwrite? }"""
+    from framework import scenario_store
+    data = request.get_json(force=True) or {}
+    overwrite = bool(data.pop("overwrite", False))
+    yaml_text = data.pop("yaml", None)
+    if yaml_text and not data.get("steps"):
+        # Convenience: caller can supply the YAML and we'll parse the steps
+        s = scenario_store.from_yaml_text(
+            scenario_id=data.get("id", ""),
+            title=data.get("title", ""),
+            yaml_text=yaml_text,
+            description=data.get("description", ""),
+            tags=data.get("tags") or [],
+            author=data.get("author", ""),
+        )
+        s.screen = data.get("screen") or s.screen
+        s.variables = data.get("variables") or {}
+    else:
+        try:
+            s = scenario_store.Scenario.from_dict(data)
+        except Exception as e:
+            return jsonify({"error": f"bad scenario payload: {e}"}), 400
+    try:
+        saved = scenario_store.save_scenario(s, overwrite=overwrite)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True, "scenario": scenario_store.get_scenario(saved.id)})
+
+
+@app.route("/api/scenarios/<scenario_id>")
+def api_scenarios_get(scenario_id: str):
+    from framework import scenario_store
+    s = scenario_store.get_scenario(scenario_id)
+    if not s:
+        return jsonify({"error": "not found"}), 404
+    return jsonify(s)
+
+
+@app.route("/api/scenarios/<scenario_id>", methods=["DELETE"])
+def api_scenarios_delete(scenario_id: str):
+    from framework import scenario_store
+    ok = scenario_store.delete_scenario(scenario_id)
+    return jsonify({"ok": ok})
+
+
+@app.route("/api/scenarios/<scenario_id>/yaml")
+def api_scenarios_yaml(scenario_id: str):
+    """Download a scenario as runnable YAML. Optional ?vars=key=val,key=val
+    applies overrides before rendering."""
+    from framework import scenario_store
+    s = scenario_store.get_scenario(scenario_id)
+    if not s:
+        return jsonify({"error": "not found"}), 404
+    overrides = {}
+    raw = request.args.get("vars") or ""
+    for chunk in raw.split(","):
+        if "=" in chunk:
+            k, v = chunk.split("=", 1)
+            overrides[k.strip()] = v.strip()
+    yml = scenario_store.to_yaml_text(s, overrides or None)
+    fname = f"{scenario_id}.yaml"
+    return Response(yml, mimetype="application/x-yaml",
+                    headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+
+@app.route("/api/intent-parse", methods=["POST"])
+def api_intent_parse():
+    """Parse a natural-language request → structured launch plan.
+    POST JSON: { prompt, use_llm? }
+    Returns: { scenario_id, user_alias, env_alias, overrides, confidence,
+               notes, llm_used, llm_error, runnable, yaml_preview? }
+    """
+    from framework.intent_parser import parse_intent
+    from framework import scenario_store
+    data = request.get_json(force=True) or {}
+    prompt = (data.get("prompt") or "").strip()
+    if not prompt:
+        return jsonify({"error": "prompt is required"}), 400
+    use_llm = bool(data.get("use_llm", True))
+    intent = parse_intent(prompt, use_llm=use_llm)
+    out = {
+        "scenario_id": intent.scenario_id,
+        "user_alias":  intent.user_alias,
+        "env_alias":   intent.env_alias,
+        "overrides":   intent.overrides,
+        "confidence":  intent.confidence,
+        "notes":       intent.notes,
+        "llm_used":    intent.llm_used,
+        "llm_error":   intent.llm_error,
+        "runnable":    intent.is_runnable(),
+    }
+    if intent.scenario_id:
+        s = scenario_store.get_scenario(intent.scenario_id)
+        if s:
+            out["scenario_title"] = s.get("title")
+            out["yaml_preview"] = scenario_store.to_yaml_text(s, intent.overrides)
+    return jsonify(out)
+
+
+@app.route("/api/scenarios/<scenario_id>/run", methods=["POST"])
+def api_scenarios_run(scenario_id: str):
+    """Launch a saved scenario through the existing single-screen runner.
+
+    POST JSON: { user_alias?, env_alias?, overrides?, url?, user?, password? }
+    Anything explicit in the body wins over the directory lookup.
+    """
+    global CURRENT
+    from framework import scenario_store
+    s = scenario_store.get_scenario(scenario_id)
+    if not s:
+        return jsonify({"error": "scenario not found"}), 404
+    data = request.get_json(force=True) or {}
+
+    directory = scenario_store.load_directory()
+    user_alias = data.get("user_alias")
+    env_alias  = data.get("env_alias")
+
+    # Resolve env → url + machine_id
+    env_cfg = (directory.get("envs") or {}).get(env_alias) or {}
+    url = data.get("url") or env_cfg.get("url") or ""
+    machine_id = data.get("machine_id") or env_cfg.get("machine_id") or ""
+
+    # Resolve user → username + password (passwords are never stored on disk,
+    # so the caller must supply it for "real" runs)
+    user_cfg = (directory.get("users") or {}).get(user_alias) or {}
+    username = data.get("user") or user_cfg.get("username") or ""
+    password = data.get("password") or user_cfg.get("password") or ""
+
+    if not (url and username and password):
+        return jsonify({"error": "url, user, and password are required "
+                                  "(set them in env-directory or pass explicitly)"}), 400
+
+    # Build a YAML doc with overrides applied, hand to the existing
+    # single-screen runner via the custom_tests_yaml input.
+    overrides = data.get("overrides") or {}
+    yaml_text = scenario_store.to_yaml_text(s, overrides)
+
+    cfg = DemoConfig(
+        base_url=url, user=username, password=password,
+        screen=s.get("screen") or "customer",
+        machine_id=machine_id,
+        headless=True, slow_mo_ms=0, read_only=False, diagnose=False,
+        capture_step_screenshots=True, capture_html=True,
+        reports_dir=REPORTS_DIR,
+    )
+
+    with LOCK:
+        if CURRENT.running:
+            return jsonify({"error": "A run is already in progress"}), 409
+        CURRENT = RunState()
+        CURRENT.id = uuid4().hex[:8]
+        CURRENT.running = True
+        CURRENT.started_at = time.time()
+        CURRENT.config_snapshot = {
+            "url": url, "user": username, "screen": s.get("screen"),
+            "machine_id": machine_id, "scenario_id": scenario_id,
+            "scenario_title": s.get("title"),
+            "user_alias": user_alias, "env_alias": env_alias,
+            "single_mode": True, "single_screenname": s.get("screen"),
+            "from_scenario": True,
+        }
+
+    # Record the run on the scenario (for "last run" + "run count" badges)
+    scenario_store.record_run(scenario_id)
+
+    def _worker(c, state, sn, custom_yaml):
+        def on_event(evt: StepEvent) -> None:
+            try:
+                if evt.type != "__end__":
+                    state.event_log.append({
+                        "type": evt.type, "text": evt.text, "step": evt.step,
+                        "screenshot": _screenshot_url(evt.screenshot_path) if evt.screenshot_path else None,
+                        "html":       _html_url(evt.html_path) if evt.html_path else None,
+                        "console":    evt.console_tail,
+                    })
+            except Exception: pass
+            state.queue.put(evt)
+        try:
+            res = run_single_screen(c, sn, on_event, safe_mode=True,
+                                    custom_tests_yaml=custom_yaml)
+        except Exception as e:
+            state.queue.put(StepEvent(type="fail", text=f"runtime: {e}"))
+            res = DemoResult(passed=False, steps_total=0, steps_passed=0,
+                             steps_failed=1, duration_s=0,
+                             failures=[("runtime", str(e))])
+        state.result = res
+        state.running = False
+        try:
+            from framework.demo_runner import _Tracker as _Trk
+            state.network_log = list(getattr(_Trk, "_last_network_log", []) or [])
+            state.console_log = list(getattr(_Trk, "_last_console_log", []) or [])
+        except Exception:
+            state.network_log = []; state.console_log = []
+        state.queue.put(StepEvent(type="__end__"))
+        try:
+            snap = dict(state.config_snapshot or {})
+            snap["started_at"] = state.started_at
+            snap["run_id"] = state.id
+            build_run_report(out_path=REPORTS_DIR / "last_run.html",
+                             config=snap, result=asdict(res),
+                             events=state.event_log,
+                             network=getattr(state, "network_log", []),
+                             console=getattr(state, "console_log", []))
+        except Exception as e:
+            print(f"  [warn] report build failed: {e}")
+        _append_history({
+            "id": state.id,
+            "ts": datetime.now().isoformat(timespec="seconds"),
+            "config": state.config_snapshot,
+            "passed": res.passed,
+            "steps_total": res.steps_total,
+            "steps_passed": res.steps_passed,
+            "steps_failed": res.steps_failed,
+            "duration_s": res.duration_s,
+            "failures": res.failures,
+        })
+
+    threading.Thread(target=_worker,
+                     args=(cfg, CURRENT, s.get("screen"), yaml_text),
+                     daemon=True).start()
+    return jsonify({"run_id": CURRENT.id, "scenario_id": scenario_id})
+
+
 @app.route("/api/catalog/<screenname>/yaml")
 def api_catalog_yaml(screenname: str):
     """Download the auto-generated tests for ONE screen as an editable YAML

@@ -61,6 +61,7 @@ const ROUTE_LABEL = {
   runs:      "Run history",
   catalog:   "Screen catalog",
   converter: "YAML converter",
+  scenarios: "Scenarios",
   env:       "Environments",
   help:      "Mode glossary",
 };
@@ -80,6 +81,7 @@ function renderView() {
     case "runs":      renderHistory();   break;
     case "catalog":   renderCatalog();   break;
     case "converter": renderConverter(); break;
+    case "scenarios": renderScenarios(); break;
     case "env":       renderEnv();       break;
     case "help":      renderHelp();      break;
   }
@@ -149,6 +151,8 @@ async function loadProfiles() {
 // View: Dashboard
 // ===========================================================================
 async function renderDashboard() {
+  bindLauncher();
+  loadScenarios();    // populates sidebar count + caches for launcher
   await Promise.all([loadCatalog(), loadHistory()]);
   const screens = state.catalog.screens || [];
   const history = state.history;
@@ -1083,10 +1087,13 @@ async function convertExcel(file) {
         `<a href="/api/template/xlsx" style="color:var(--c-brand)">Use the official template</a> for 100% accuracy.`;
     }
 
-    // Build action buttons: download combined YAML always; ZIP if multi-screen.
+    // Build action buttons: download combined YAML always; ZIP if multi-screen;
+    // Save-as-scenario lets the user park this YAML in the scenario library
+    // for later natural-language recall ("test STRAT-28795 with u2").
     const acts = [];
     acts.push(`<button class="btn btn-sm" id="conv-dl-yaml" type="button">⬇ Download YAML</button>`);
-    if (n > 1) acts.push(`<button class="btn btn-sm btn-primary" id="conv-dl-zip" type="button">⬇ Download ZIP (${n} files)</button>`);
+    if (n > 1) acts.push(`<button class="btn btn-sm" id="conv-dl-zip" type="button">⬇ Download ZIP (${n} files)</button>`);
+    acts.push(`<button class="btn btn-sm btn-primary" id="conv-save-scenario" type="button">💾 Save as scenario</button>`);
     acts.push(`<button class="btn btn-sm btn-ghost" id="conv-copy" type="button">📋 Copy</button>`);
     $("#conv-result-actions").innerHTML = acts.join(" ");
 
@@ -1101,6 +1108,7 @@ async function convertExcel(file) {
       $("#conv-copy").textContent = "✓ Copied";
       setTimeout(() => { $("#conv-copy").innerHTML = "📋 Copy"; }, 1500);
     };
+    $("#conv-save-scenario").onclick = () => promptSaveScenario(data.yaml, file.name, data.screens || []);
   } catch (err) {
     $("#conv-result-title").innerHTML =
       `<b style="color:var(--c-danger)">Failed</b>`;
@@ -1453,6 +1461,292 @@ $("#env-select").addEventListener("change", e => {
 });
 
 // ===========================================================================
+// Scenarios — saved-test library + natural-language launcher
+// ===========================================================================
+let _scenariosCache = null;
+
+async function loadScenarios(force=false) {
+  if (_scenariosCache && !force) return _scenariosCache;
+  const r = await fetch("/api/scenarios");
+  _scenariosCache = await r.json();
+  const n = (_scenariosCache.scenarios || []).length;
+  const el = $("#scenarios-count");
+  if (el) el.textContent = n || "—";
+  return _scenariosCache;
+}
+
+async function renderScenarios() {
+  await loadScenarios(true);
+  const rows = _scenariosCache.scenarios || [];
+  const dir  = _scenariosCache.directory || { users: {}, envs: {} };
+  const userKeys = Object.keys(dir.users || {});
+  const envKeys  = Object.keys(dir.envs  || {});
+  const draw = () => {
+    const q = ($("#scenarios-search").value || "").toLowerCase();
+    const filtered = rows.filter(s => !q
+      || (s.id || "").toLowerCase().includes(q)
+      || (s.title || "").toLowerCase().includes(q)
+      || (s.tags || []).some(t => (t || "").toLowerCase().includes(q)));
+    $("#scenarios-meta").textContent = `${filtered.length} of ${rows.length}`;
+    if (!filtered.length) {
+      $("#scenarios-table").innerHTML = emptyState(
+        rows.length ? "No matches" : "No scenarios yet",
+        rows.length ? "Try a different filter."
+                    : "Use the YAML Converter and click 💾 Save as scenario to add one.");
+      return;
+    }
+    $("#scenarios-table").innerHTML = `<table class="dt">
+      <thead><tr>
+        <th>ID</th><th>Title</th><th style="width:120px">Screen</th>
+        <th style="width:160px">Tags</th><th style="width:100px">Vars</th>
+        <th style="width:90px" class="text-right">Runs</th>
+        <th style="width:120px">Last run</th><th style="width:200px"></th>
+      </tr></thead>
+      <tbody>${filtered.map(s => {
+        const tags = (s.tags || []).map(t => `<span class="tag">${escapeHTML(t)}</span>`).join(" ");
+        const vars = Object.keys(s.variables || {}).length;
+        const last = s.last_run_ts ? fmt.ago(new Date(s.last_run_ts * 1000)) : "—";
+        return `<tr>
+          <td><code class="text-xs">${escapeHTML(s.id)}</code></td>
+          <td><strong>${escapeHTML(s.title)}</strong>${s.description ? `<div class="muted text-xs">${escapeHTML(s.description).slice(0,90)}</div>` : ""}</td>
+          <td>${s.screen ? `<span class="tag tag-blue">${escapeHTML(s.screen)}</span>` : ""}</td>
+          <td>${tags}</td>
+          <td>${vars}</td>
+          <td class="text-right tnum">${s.run_count || 0}</td>
+          <td class="muted text-xs">${last}</td>
+          <td><div class="row-actions">
+            <a href="/api/scenarios/${encodeURIComponent(s.id)}/yaml" class="btn btn-sm btn-ghost">⬇ YAML</a>
+            <button class="btn btn-sm btn-primary" data-act="run" data-id="${escapeHTML(s.id)}">▶ Run</button>
+            <button class="btn btn-sm btn-ghost" data-act="del" data-id="${escapeHTML(s.id)}">Delete</button>
+          </div></td>
+        </tr>`;
+      }).join("")}</tbody></table>`;
+    $("#scenarios-table").querySelectorAll("button[data-act]").forEach(b => {
+      b.onclick = async () => {
+        const { act, id } = b.dataset;
+        if (act === "del") {
+          if (!confirm(`Delete scenario "${id}"?`)) return;
+          await fetch(`/api/scenarios/${encodeURIComponent(id)}`, { method: "DELETE" });
+          await loadScenarios(true); renderScenarios();
+        } else if (act === "run") {
+          openRunScenarioModal(id, userKeys, envKeys);
+        }
+      };
+    });
+  };
+  draw();
+  $("#scenarios-search").oninput = draw;
+}
+
+// ----- Save-as-scenario modal --------------------------------------------
+function promptSaveScenario(yamlText, sourceFilename, screens) {
+  const suggestId = (sourceFilename || "scenario").replace(/\.[^.]+$/, "")
+    .replace(/[^A-Za-z0-9_\-]/g, "-").slice(0, 60) || "scenario";
+  const suggestTitle = sourceFilename || "Imported scenario";
+  const html = `
+    <div class="modal-overlay" id="scn-save-modal" style="z-index:120">
+      <div class="modal" style="width:520px">
+        <div class="modal-h"><span>💾 Save as scenario</span>
+          <button class="icon-btn" onclick="document.getElementById('scn-save-modal').remove()">×</button>
+        </div>
+        <div class="modal-b">
+          <div class="field mb-3"><label>Scenario ID <span class="muted text-xs">(stable handle, e.g. STRAT-28795)</span></label>
+            <input id="scn-id" type="text" value="${escapeHTML(suggestId)}" class="w-full"></div>
+          <div class="field mb-3"><label>Title</label>
+            <input id="scn-title" type="text" value="${escapeHTML(suggestTitle)}" class="w-full"></div>
+          <div class="field mb-3"><label>Description (optional)</label>
+            <textarea id="scn-desc" rows="2" class="w-full" placeholder="e.g. Reproduces STRAT-28795 — shipping with invalid box dimensions"></textarea></div>
+          <div class="field mb-3"><label>Tags (comma-separated)</label>
+            <input id="scn-tags" type="text" class="w-full" placeholder="bug, regression, shipping"></div>
+          <div class="field mb-3"><label>Variables — name=defaultvalue per line</label>
+            <textarea id="scn-vars" rows="3" class="w-full" style="font-family:var(--f-mono)"
+              placeholder="order_number=WEB-12345
+customer_name=Smith"></textarea></div>
+          <label class="checkbox mt-2"><input type="checkbox" id="scn-overwrite"> Overwrite if ID exists</label>
+          <div id="scn-err" style="color:var(--c-danger); font-size:12px; margin-top:8px"></div>
+        </div>
+        <div class="modal-f">
+          <button class="btn" onclick="document.getElementById('scn-save-modal').remove()">Cancel</button>
+          <button class="btn btn-primary" id="scn-save-go">Save scenario</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML("beforeend", html);
+  document.getElementById("scn-save-go").onclick = async () => {
+    const id = document.getElementById("scn-id").value.trim();
+    const title = document.getElementById("scn-title").value.trim();
+    const desc = document.getElementById("scn-desc").value.trim();
+    const tags = document.getElementById("scn-tags").value.split(",").map(t => t.trim()).filter(Boolean);
+    const varsText = document.getElementById("scn-vars").value;
+    const variables = {};
+    varsText.split("\n").forEach(line => {
+      const m = line.match(/^([\w.-]+)\s*=\s*(.+)$/);
+      if (m) variables[m[1]] = m[2].trim();
+    });
+    const overwrite = document.getElementById("scn-overwrite").checked;
+    const screen = (screens && screens.length === 1) ? screens[0] : "";
+
+    const err = document.getElementById("scn-err");
+    err.textContent = "Saving…";
+    const r = await fetch("/api/scenarios", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id, title, description: desc, tags, variables, screen,
+        yaml: yamlText, overwrite,
+      }),
+    });
+    const j = await r.json();
+    if (!r.ok || j.error) { err.textContent = "Failed: " + (j.error || r.status); return; }
+    document.getElementById("scn-save-modal").remove();
+    await loadScenarios(true);
+    alert(`✓ Scenario "${id}" saved. Try it from the dashboard: "test ${id}"`);
+  };
+}
+
+// ----- Run-scenario modal (asks for password + any overrides) ------------
+function openRunScenarioModal(scenarioId, userKeys, envKeys) {
+  loadScenarios().then(c => {
+    const s = (c.scenarios || []).find(x => x.id === scenarioId);
+    if (!s) return;
+    const varsHtml = Object.entries(s.variables || {}).map(([k, v]) =>
+      `<div class="field mb-2"><label>${escapeHTML(k)}</label>
+        <input data-var="${escapeHTML(k)}" class="w-full scn-var" type="text" value="${escapeHTML(String(v))}"></div>`).join("");
+    const html = `
+      <div class="modal-overlay" id="scn-run-modal" style="z-index:120">
+        <div class="modal" style="width:520px">
+          <div class="modal-h"><span>▶ Run scenario · ${escapeHTML(scenarioId)}</span>
+            <button class="icon-btn" onclick="document.getElementById('scn-run-modal').remove()">×</button>
+          </div>
+          <div class="modal-b">
+            <p class="muted text-xs" style="margin:0 0 12px">${escapeHTML(s.title || "")}</p>
+            <div class="field mb-3"><label>Environment</label>
+              <select id="scn-run-env" class="w-full">
+                ${envKeys.map(k => `<option value="${escapeHTML(k)}">${escapeHTML(k)}</option>`).join("")}
+              </select></div>
+            <div class="field mb-3"><label>User</label>
+              <select id="scn-run-user" class="w-full">
+                ${userKeys.map(k => `<option value="${escapeHTML(k)}">${escapeHTML(k)}</option>`).join("")}
+              </select></div>
+            <div class="field mb-3"><label>Password</label>
+              <input id="scn-run-pw" type="password" class="w-full" placeholder="(not stored)"></div>
+            ${varsHtml ? `<div class="muted text-xs mb-2">Variables (override defaults):</div>${varsHtml}` : ""}
+          </div>
+          <div class="modal-f">
+            <button class="btn" onclick="document.getElementById('scn-run-modal').remove()">Cancel</button>
+            <button class="btn btn-primary" id="scn-run-go">▶ Start</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.insertAdjacentHTML("beforeend", html);
+    document.getElementById("scn-run-go").onclick = () =>
+      submitScenarioRun(scenarioId);
+  });
+}
+
+async function submitScenarioRun(scenarioId, fromIntent=null) {
+  const user_alias = document.getElementById("scn-run-user")?.value;
+  const env_alias  = document.getElementById("scn-run-env")?.value;
+  const password   = document.getElementById("scn-run-pw")?.value || "";
+  const overrides = {};
+  document.querySelectorAll(".scn-var").forEach(el => {
+    if (el.value) overrides[el.dataset.var] = el.value;
+  });
+  // Pull overrides from a fromIntent if any (when launching from the dashboard
+  // launcher, those came from the intent parser).
+  if (fromIntent && fromIntent.overrides) {
+    for (const [k, v] of Object.entries(fromIntent.overrides))
+      if (!overrides[k]) overrides[k] = v;
+  }
+  const body = { user_alias, env_alias, password, overrides };
+  const r = await fetch(`/api/scenarios/${encodeURIComponent(scenarioId)}/run`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (r.status === 409) { alert("A run is already in progress"); return; }
+  if (!r.ok) { const j = await r.json(); alert("Run failed: " + (j.error || r.status)); return; }
+  const modal = document.getElementById("scn-run-modal");
+  if (modal) modal.remove();
+  navigate("#/run");
+}
+
+// ----- Dashboard natural-language launcher -------------------------------
+function bindLauncher() {
+  const btn = $("#launcher-go");
+  const input = $("#launcher-input");
+  if (!btn || btn._wired) return;
+  btn._wired = true;
+  const go = async () => {
+    const prompt = (input.value || "").trim();
+    if (!prompt) return;
+    const out = $("#launcher-result");
+    out.innerHTML = `<span class="muted text-xs">Parsing…</span>`;
+    const r = await fetch("/api/intent-parse", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt }),
+    });
+    const data = await r.json();
+    if (data.error) { out.innerHTML = `<b style="color:var(--c-danger)">${escapeHTML(data.error)}</b>`; return; }
+    if (!data.scenario_id) {
+      out.innerHTML = `<b style="color:var(--c-warning)">No scenario matched.</b> ` +
+        `<a href="#/scenarios" style="color:var(--c-brand)">Browse the library</a> ` +
+        `(${(data.notes || []).join(" · ")}).`;
+      return;
+    }
+    const conf = Math.round((data.confidence || 0) * 100);
+    const overridesNote = Object.keys(data.overrides || {}).length
+      ? ` overrides: <code>${escapeHTML(JSON.stringify(data.overrides))}</code>`
+      : "";
+    out.innerHTML = `
+      <div style="padding:10px 12px; background:var(--c-brand-soft); border-left:3px solid var(--c-brand)">
+        <b>Match:</b> <code>${escapeHTML(data.scenario_id)}</code> — ${escapeHTML(data.scenario_title || "")}
+        <span class="muted text-xs" style="margin-left:6px">(${conf}% confident${data.llm_used ? " · AI" : ""})</span><br>
+        <span class="muted text-xs">user: <b>${escapeHTML(data.user_alias || "?")}</b> · env: <b>${escapeHTML(data.env_alias || "?")}</b>${overridesNote}</span>
+        <div class="flex gap-2 mt-3">
+          <button class="btn btn-primary btn-sm" id="launcher-confirm">▶ Run now</button>
+          <button class="btn btn-sm" id="launcher-edit">Edit details…</button>
+        </div>
+      </div>`;
+    // Cache the intent for the confirm button
+    window._launcherIntent = data;
+    $("#launcher-confirm").onclick = () => runFromIntent(data);
+    $("#launcher-edit").onclick = () => {
+      loadScenarios().then(c => {
+        const dir = c.directory || { users: {}, envs: {} };
+        openRunScenarioModal(data.scenario_id, Object.keys(dir.users), Object.keys(dir.envs));
+        // Pre-fill modal with parsed user/env/overrides
+        setTimeout(() => {
+          if (data.user_alias) document.getElementById("scn-run-user").value = data.user_alias;
+          if (data.env_alias)  document.getElementById("scn-run-env").value = data.env_alias;
+          (data.overrides || {}) && document.querySelectorAll(".scn-var").forEach(el => {
+            if (data.overrides[el.dataset.var]) el.value = data.overrides[el.dataset.var];
+          });
+        }, 50);
+      });
+    };
+  };
+  btn.onclick = go;
+  input.onkeydown = e => { if (e.key === "Enter") go(); };
+}
+
+function runFromIntent(intent) {
+  // Need a password — open the modal so user can supply it (we never store it)
+  loadScenarios().then(c => {
+    const dir = c.directory || { users: {}, envs: {} };
+    openRunScenarioModal(intent.scenario_id, Object.keys(dir.users), Object.keys(dir.envs));
+    setTimeout(() => {
+      if (intent.user_alias) document.getElementById("scn-run-user").value = intent.user_alias;
+      if (intent.env_alias)  document.getElementById("scn-run-env").value = intent.env_alias;
+      Object.entries(intent.overrides || {}).forEach(([k, v]) => {
+        const el = document.querySelector(`.scn-var[data-var="${k}"]`);
+        if (el) el.value = v;
+      });
+      // Focus password
+      document.getElementById("scn-run-pw")?.focus();
+    }, 50);
+  });
+}
+
+// ===========================================================================
 // View: Help
 // ===========================================================================
 function renderHelp() {
@@ -1513,6 +1807,16 @@ const palette = {
     items.push({ section: "Navigate", label: "Run history",          hint: "Past runs",       href: "#/runs" });
     items.push({ section: "Navigate", label: "Screen catalog",       hint: "All screens",     href: "#/catalog" });
     items.push({ section: "Navigate", label: "YAML converter",        hint: "Excel → YAML",    href: "#/converter" });
+    items.push({ section: "Navigate", label: "Scenarios",             hint: "Saved test plans",href: "#/scenarios" });
+    // Each saved scenario as its own searchable item
+    (_scenariosCache?.scenarios || []).forEach(s => {
+      items.push({
+        section: "Scenarios",
+        label: `${s.id} — ${s.title || ""}`.slice(0, 80),
+        hint: (s.tags || []).join(", ") || (s.screen || ""),
+        href: `#/scenarios`,
+      });
+    });
     items.push({ section: "Navigate", label: "Environments",         hint: "Saved profiles",  href: "#/env" });
     items.push({ section: "Navigate", label: "Mode glossary",        hint: "Help",            href: "#/help" });
     items.push({ section: "Quick action", label: "Start: Single screen",  hint: "Pick + run", href: "#/new?preset=single" });
@@ -1583,6 +1887,7 @@ function escapeHTML(s) {
   await refreshEnvChip();
   await loadCatalog();
   await loadHistory();
+  await loadScenarios();
   palette.build();
   updateStatusBar();
   if (!location.hash) location.hash = "#/dashboard";

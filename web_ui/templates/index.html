@@ -48,6 +48,7 @@
     <a href="#/runs"      class="tab" data-tab="runs">Run history</a>
     <a href="#/catalog"   class="tab" data-tab="catalog">Screen catalog</a>
     <a href="#/converter" class="tab" data-tab="converter">YAML converter</a>
+    <a href="#/scenarios" class="tab" data-tab="scenarios">Scenarios</a>
     <a href="#/env"       class="tab" data-tab="env">Environments</a>
     <a href="#/help"      class="tab" data-tab="help">Mode glossary</a>
   </nav>
@@ -76,6 +77,11 @@
     <a href="#/converter" class="side-link" data-route="converter">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="m9 18 3-3-3-3"/><path d="m15 12 3 3-3 3"/></svg>
       YAML converter
+    </a>
+    <a href="#/scenarios" class="side-link" data-route="scenarios">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+      Scenarios
+      <span class="count" id="scenarios-count">—</span>
     </a>
 
     <div class="side-section">Configuration</div>
@@ -106,6 +112,27 @@
               Run nightly regression
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
             </a>
+          </div>
+        </div>
+
+        <!-- Natural-language scenario launcher -->
+        <div class="tile mb-5" style="border-left:3px solid var(--c-brand)">
+          <div style="padding:20px 24px">
+            <div class="flex items-center justify-between mb-2" style="flex-wrap:wrap; gap:8px">
+              <h2 style="margin:0; font-size:18px; font-weight:600">🎯 Run a saved scenario</h2>
+              <a href="#/scenarios" class="muted text-xs">Browse all scenarios →</a>
+            </div>
+            <p class="muted text-xs" style="margin:0 0 12px">
+              Type what you want to do in plain English. Try
+              <code>test STRAT-28795 with u2</code> or
+              <code>run customer-search-smoke on staging</code>.
+            </p>
+            <div class="flex gap-2" style="flex-wrap:wrap">
+              <input type="text" id="launcher-input" placeholder="e.g. test STRAT-28795 with u2 on staging"
+                     style="flex:1; min-width:300px; font-size:15px; height:40px; padding:0 14px">
+              <button class="btn btn-primary" id="launcher-go" style="height:40px">▶ Run</button>
+            </div>
+            <div id="launcher-result" style="margin-top:10px"></div>
           </div>
         </div>
 
@@ -692,6 +719,25 @@
             <h3 style="margin:18px 0 6px; font-size:16px">Don't have the template? Legacy prose also works</h3>
             <p class="muted text-xs">The converter will still try to translate free-prose Excel files like the ones already in circulation. Anything the regex can't map becomes a <code>todo</code> step that's preserved verbatim — the YAML still runs, the run log flags it, and a QA can edit the rest later. For 100% accuracy, use the template.</p>
           </div>
+        </div>
+      </section>
+
+      <!-- ========== SCENARIOS ========== -->
+      <section class="view hidden" data-view="scenarios">
+        <div class="ph">
+          <div>
+            <h1 class="ph-title">Scenarios</h1>
+            <p class="ph-sub">Saved test scenarios. Recall them from the dashboard launcher with plain English.</p>
+          </div>
+          <div class="ph-actions"><a href="#/converter" class="btn btn-primary">+ Save from converter</a></div>
+        </div>
+        <div class="tile">
+          <div class="toolbar">
+            <input id="scenarios-search" type="text" placeholder="Filter by id, title, or tag…">
+            <div class="spc"></div>
+            <span class="muted text-xs" id="scenarios-meta">—</span>
+          </div>
+          <div id="scenarios-table"></div>
         </div>
       </section>
 
