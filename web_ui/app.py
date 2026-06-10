@@ -46,7 +46,7 @@ sys.path.insert(0, str(ROOT))
 
 from flask import (
     Flask, Response, jsonify, render_template,
-    request, send_file, send_from_directory,
+    request, send_file, send_from_directory, session,
 )
 
 from framework.demo_runner import (
@@ -62,6 +62,110 @@ from framework.bulk_runner import run_bulk
 from web_ui.report_builder import build_run_report
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
+
+# ============================================================ Auth
+from framework import auth as _auth
+app.secret_key = _auth.session_secret()
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+# Sessions persist 30 days — laptops typically run one tester for a long time.
+from datetime import timedelta as _td
+app.permanent_session_lifetime = _td(days=30)
+
+
+# ---- auth endpoints --------------------------------------------------------
+
+@app.route("/api/auth/status")
+def api_auth_status():
+    """Tell the SPA who's logged in (and whether bootstrap is needed)."""
+    return jsonify({
+        "username": _auth.current_user(),
+        "role":     _auth.current_role(),
+        "has_users": _auth.has_users(),
+    })
+
+
+@app.route("/api/auth/login", methods=["POST"])
+def api_auth_login():
+    data = request.get_json(force=True) or {}
+    username = (data.get("username") or "").strip().lower()
+    password = data.get("password") or ""
+    if not _auth.verify_password(username, password):
+        return jsonify({"error": "invalid username or password"}), 401
+    session.permanent = True
+    session["username"] = username
+    _auth.stamp_login(username)
+    u = _auth.get_user(username) or {}
+    return jsonify({"username": username, "role": u.get("role", "user")})
+
+
+@app.route("/api/auth/logout", methods=["POST"])
+def api_auth_logout():
+    session.pop("username", None)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/auth/register", methods=["POST"])
+def api_auth_register():
+    """Bootstrap: the FIRST POST (when there are zero users) creates an
+    admin without any auth. Subsequent calls require an admin session."""
+    data = request.get_json(force=True) or {}
+    username = (data.get("username") or "").strip().lower()
+    password = data.get("password") or ""
+    role     = data.get("role") or "user"
+
+    if not _auth.has_users():
+        # Bootstrap — first ever user is admin
+        try:
+            _auth.create_user(username, password, role="admin")
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+        # Auto-login the bootstrap user
+        session.permanent = True
+        session["username"] = username
+        _auth.stamp_login(username)
+        return jsonify({"username": username, "role": "admin", "bootstrap": True})
+
+    # Subsequent registrations need an admin caller
+    if _auth.current_role() != "admin":
+        return jsonify({"error": "admin only"}), 403
+    try:
+        _auth.create_user(username, password, role=role)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"username": username, "role": role})
+
+
+@app.route("/api/auth/users")
+@_auth.login_required
+def api_auth_users():
+    return jsonify({"users": _auth.list_users()})
+
+
+@app.route("/api/auth/users/<username>", methods=["DELETE"])
+@_auth.admin_required
+def api_auth_users_delete(username: str):
+    if username == _auth.current_user():
+        return jsonify({"error": "you can't delete yourself"}), 400
+    ok = _auth.delete_user(username)
+    return jsonify({"ok": ok})
+
+
+@app.route("/api/auth/password", methods=["POST"])
+@_auth.login_required
+def api_auth_change_password():
+    """Change your own password. Admins may pass `username` to change someone else's."""
+    data = request.get_json(force=True) or {}
+    target = (data.get("username") or _auth.current_user() or "").strip().lower()
+    new_pw = data.get("new_password") or ""
+    if target != _auth.current_user() and _auth.current_role() != "admin":
+        return jsonify({"error": "admin only"}), 403
+    try:
+        _auth.change_password(target, new_pw)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True})
+# ============================================================
 
 REPORTS_DIR = ROOT / "reports"
 SCREENSHOTS_DIR = REPORTS_DIR / "screenshots"
@@ -135,6 +239,7 @@ def index():
 # ---------------------------------------------------------- run
 
 @app.route("/api/run", methods=["POST"])
+@_auth.login_required
 def api_run():
     global CURRENT
     with LOCK:
@@ -449,11 +554,20 @@ def api_profile_delete(name: str):
 # ---------------------------------------------------------- history
 
 @app.route("/api/history")
+@_auth.login_required
 def api_history():
-    return jsonify(_read_json(HISTORY_FILE, [])[-25:][::-1])
+    """Run history filtered to the current user (admin sees all)."""
+    rows = _read_json(HISTORY_FILE, [])
+    me = _auth.current_user()
+    if _auth.current_role() != "admin":
+        rows = [r for r in rows if (r.get("owner") or "") in ("", me)]
+    return jsonify(rows[-25:][::-1])
 
 
 def _append_history(entry: dict) -> None:
+    # Stamp owner so per-user filtering works
+    if "owner" not in entry:
+        entry["owner"] = _auth.current_user() or ""
     h = _read_json(HISTORY_FILE, [])
     h.append(entry)
     _write_json(HISTORY_FILE, h[-200:])  # keep last 200
@@ -907,42 +1021,67 @@ def api_template_csv():
                      download_name="Stratus-QA-TestCase-Template.csv")
 
 
+def _user_can_see(scenario: dict) -> bool:
+    """Per-user visibility: admins see all, regular users see their own
+    + any scenario with no owner (legacy / shared)."""
+    me = _auth.current_user()
+    role = _auth.current_role()
+    if not me: return False
+    if role == "admin": return True
+    owner = (scenario or {}).get("author") or ""
+    return owner == me or owner == ""    # blank owner = shared / legacy
+
+
 @app.route("/api/scenarios")
+@_auth.login_required
 def api_scenarios_list():
-    """List every saved scenario, newest first."""
+    """List the current user's scenarios (admins see all). Newest first."""
     from framework import scenario_store
+    all_scn = scenario_store.list_scenarios()
+    visible = [s for s in all_scn if _user_can_see(s)]
     return jsonify({
-        "scenarios": scenario_store.list_scenarios(),
+        "scenarios": visible,
         "directory": scenario_store.load_directory(),
+        "total":   len(all_scn),
+        "visible": len(visible),
     })
 
 
 @app.route("/api/scenarios", methods=["POST"])
+@_auth.login_required
 def api_scenarios_create():
     """Save a new scenario. POST JSON body:
        { id, title, description?, screen?, tags?, variables?, steps OR yaml,
-         author?, overwrite? }"""
+         overwrite? }
+    Owner is forced to the logged-in user (you can't impersonate)."""
     from framework import scenario_store
     data = request.get_json(force=True) or {}
     overwrite = bool(data.pop("overwrite", False))
     yaml_text = data.pop("yaml", None)
+    me = _auth.current_user() or ""
     if yaml_text and not data.get("steps"):
-        # Convenience: caller can supply the YAML and we'll parse the steps
         s = scenario_store.from_yaml_text(
             scenario_id=data.get("id", ""),
             title=data.get("title", ""),
             yaml_text=yaml_text,
             description=data.get("description", ""),
             tags=data.get("tags") or [],
-            author=data.get("author", ""),
+            author=me,
         )
         s.screen = data.get("screen") or s.screen
         s.variables = data.get("variables") or {}
     else:
         try:
+            data["author"] = me
             s = scenario_store.Scenario.from_dict(data)
         except Exception as e:
             return jsonify({"error": f"bad scenario payload: {e}"}), 400
+    # Check overwrite: only the original owner (or admin) may overwrite
+    if overwrite:
+        existing = scenario_store.get_scenario(s.id)
+        if existing and existing.get("author") and existing["author"] != me \
+                and _auth.current_role() != "admin":
+            return jsonify({"error": "this scenario belongs to another user; you can't overwrite it"}), 403
     try:
         saved = scenario_store.save_scenario(s, overwrite=overwrite)
     except ValueError as e:
@@ -951,29 +1090,34 @@ def api_scenarios_create():
 
 
 @app.route("/api/scenarios/<scenario_id>")
+@_auth.login_required
 def api_scenarios_get(scenario_id: str):
     from framework import scenario_store
     s = scenario_store.get_scenario(scenario_id)
-    if not s:
-        return jsonify({"error": "not found"}), 404
+    if not s: return jsonify({"error": "not found"}), 404
+    if not _user_can_see(s): return jsonify({"error": "not found"}), 404
     return jsonify(s)
 
 
 @app.route("/api/scenarios/<scenario_id>", methods=["DELETE"])
+@_auth.login_required
 def api_scenarios_delete(scenario_id: str):
     from framework import scenario_store
+    s = scenario_store.get_scenario(scenario_id)
+    if not s: return jsonify({"ok": False})
+    if not _user_can_see(s): return jsonify({"error": "not found"}), 404
     ok = scenario_store.delete_scenario(scenario_id)
     return jsonify({"ok": ok})
 
 
 @app.route("/api/scenarios/<scenario_id>/yaml")
+@_auth.login_required
 def api_scenarios_yaml(scenario_id: str):
-    """Download a scenario as runnable YAML. Optional ?vars=key=val,key=val
-    applies overrides before rendering."""
+    """Download a scenario as runnable YAML. Optional ?vars=key=val,key=val."""
     from framework import scenario_store
     s = scenario_store.get_scenario(scenario_id)
-    if not s:
-        return jsonify({"error": "not found"}), 404
+    if not s: return jsonify({"error": "not found"}), 404
+    if not _user_can_see(s): return jsonify({"error": "not found"}), 404
     overrides = {}
     raw = request.args.get("vars") or ""
     for chunk in raw.split(","):
@@ -987,6 +1131,7 @@ def api_scenarios_yaml(scenario_id: str):
 
 
 @app.route("/api/intent-parse", methods=["POST"])
+@_auth.login_required
 def api_intent_parse():
     """Parse a natural-language request → structured launch plan.
     POST JSON: { prompt, use_llm? }
@@ -1021,6 +1166,7 @@ def api_intent_parse():
 
 
 @app.route("/api/scenarios/<scenario_id>/run", methods=["POST"])
+@_auth.login_required
 def api_scenarios_run(scenario_id: str):
     """Launch a saved scenario through the existing single-screen runner.
 

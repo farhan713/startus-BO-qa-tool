@@ -19,6 +19,8 @@ reports/*
 # not source. Only screens_catalog.json is the durable, shared Knowledge Base.
 knowledge_base/scenarios.json
 knowledge_base/directory.json
+knowledge_base/users.json
+knowledge_base/.session_secret
 
 # Local dev tooling (machine-specific launch config)
 .claude/

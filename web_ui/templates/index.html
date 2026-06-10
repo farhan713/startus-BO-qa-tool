@@ -38,8 +38,43 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
       </a>
     </div>
-    <div class="bb-avatar">U</div>
+    <div class="bb-avatar" id="bb-avatar" title="Click to log out">?</div>
   </header>
+
+  <!-- ============== AUTH OVERLAY ============== -->
+  <!-- Hidden by default; auth.js shows it when /api/auth/status reports
+       no session, and removes it on success. -->
+  <div id="auth-overlay" class="modal-overlay hidden" style="z-index:200; background:rgba(20,20,30,0.85)">
+    <div class="modal" style="width:380px">
+      <div class="modal-h" style="border-bottom:1px solid var(--c-border)">
+        <span id="auth-title">Sign in to Stratus QA</span>
+      </div>
+      <div class="modal-b">
+        <p class="muted text-xs" id="auth-sub" style="margin:0 0 14px">
+          Your scenarios and run history are private to your account.
+        </p>
+        <div class="field mb-3">
+          <label>Username</label>
+          <input id="auth-username" type="text" class="w-full" autocomplete="username"
+                 placeholder="e.g. farhan">
+        </div>
+        <div class="field mb-3">
+          <label>Password</label>
+          <input id="auth-password" type="password" class="w-full" autocomplete="current-password"
+                 placeholder="at least 4 characters">
+        </div>
+        <div class="field mb-3 hidden" id="auth-confirm-wrap">
+          <label>Confirm password</label>
+          <input id="auth-confirm" type="password" class="w-full"
+                 placeholder="re-type the password">
+        </div>
+        <div id="auth-err" style="color:var(--c-danger); font-size:12px; min-height:18px"></div>
+      </div>
+      <div class="modal-f">
+        <button class="btn btn-primary" id="auth-submit" style="width:100%; justify-content:center">Sign in</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ============== TABS (40px) ============== -->
   <nav class="tab-bar">
@@ -88,6 +123,10 @@
     <a href="#/env" class="side-link" data-route="env">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="0"/><rect x="2" y="14" width="20" height="8" rx="0"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
       Environments
+    </a>
+    <a href="#/users" class="side-link hidden" data-route="users" id="nav-users">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Users
     </a>
     <a href="#/help" class="side-link" data-route="help">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
@@ -806,6 +845,20 @@
           </div>
         </div>
         <div class="tile"><div id="env-table"></div></div>
+      </section>
+
+      <!-- ========== USERS (admin only) ========== -->
+      <section class="view hidden" data-view="users">
+        <div class="ph">
+          <div>
+            <h1 class="ph-title">Users</h1>
+            <p class="ph-sub">Manage tester accounts. Each tester sees only their own scenarios and run history.</p>
+          </div>
+          <div class="ph-actions">
+            <button class="btn btn-primary" id="btn-add-user">+ Add user</button>
+          </div>
+        </div>
+        <div class="tile"><div id="users-table"></div></div>
       </section>
 
       <!-- ========== HELP ========== -->

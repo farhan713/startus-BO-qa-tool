@@ -65,6 +65,7 @@ const ROUTE_LABEL = {
   converter: "YAML converter",
   scenarios: "Scenarios",
   env:       "Environments",
+  users:     "Users",
   help:      "Mode glossary",
 };
 
@@ -85,6 +86,7 @@ function renderView() {
     case "converter": renderConverter(); break;
     case "scenarios": renderScenarios(); break;
     case "env":       renderEnv();       break;
+    case "users":     renderUsers();     break;
     case "help":      renderHelp();      break;
   }
 }
@@ -2136,9 +2138,185 @@ function escapeHTML(s) {
 }
 
 // ===========================================================================
+// Auth — per-laptop login that gates the whole app
+// ===========================================================================
+const auth = {
+  user: null,     // { username, role }
+  bootstrap: false,
+
+  async refresh() {
+    const r = await fetch("/api/auth/status");
+    const s = await r.json();
+    this.user = s.username ? { username: s.username, role: s.role } : null;
+    this.bootstrap = !s.has_users;
+    this.applyVisibility();
+    return s;
+  },
+
+  applyVisibility() {
+    const av = $("#bb-avatar");
+    if (av) {
+      av.textContent = this.user ? this.user.username.slice(0,1).toUpperCase() : "?";
+      av.title = this.user
+        ? `Signed in as ${this.user.username} (${this.user.role}) — click to log out`
+        : "Sign in";
+    }
+    const usersLink = $("#nav-users");
+    if (usersLink) {
+      usersLink.classList.toggle("hidden", !(this.user && this.user.role === "admin"));
+    }
+  },
+
+  openModal({ mode = "login" } = {}) {
+    const ov = $("#auth-overlay");
+    if (!ov) return;
+    $("#auth-title").textContent = (mode === "bootstrap")
+      ? "Create the first admin account"
+      : "Sign in to Stratus QA";
+    $("#auth-sub").innerHTML = (mode === "bootstrap")
+      ? "No users yet. Set up an admin account to get started — this account can later create more users."
+      : "Your scenarios and run history are private to your account.";
+    $("#auth-confirm-wrap").classList.toggle("hidden", mode !== "bootstrap");
+    $("#auth-submit").textContent = mode === "bootstrap" ? "Create admin & sign in" : "Sign in";
+    $("#auth-err").textContent = "";
+    $("#auth-username").value = "";
+    $("#auth-password").value = "";
+    $("#auth-confirm").value = "";
+    ov.classList.remove("hidden");
+    setTimeout(() => $("#auth-username").focus(), 30);
+    // Re-bind submit (clean previous handlers)
+    $("#auth-submit").onclick = () => this.submit(mode);
+    $("#auth-overlay").onkeydown = e => { if (e.key === "Enter") this.submit(mode); };
+  },
+
+  async submit(mode) {
+    const username = ($("#auth-username").value || "").trim().toLowerCase();
+    const password = $("#auth-password").value || "";
+    const err = $("#auth-err");
+    err.textContent = "";
+    if (!username || !password) { err.textContent = "Username and password are required."; return; }
+    if (mode === "bootstrap") {
+      const confirm = $("#auth-confirm").value || "";
+      if (password !== confirm) { err.textContent = "Passwords don't match."; return; }
+    }
+    const url = (mode === "bootstrap") ? "/api/auth/register" : "/api/auth/login";
+    try {
+      const r = await fetch(url, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      const d = await r.json();
+      if (!r.ok) { err.textContent = d.error || `Failed (${r.status})`; return; }
+      this.user = { username: d.username, role: d.role };
+      this.bootstrap = false;
+      this.applyVisibility();
+      $("#auth-overlay").classList.add("hidden");
+      // Reload the data the SPA depends on, now that we're authenticated
+      await loadCatalog(true).catch(() => {});
+      await loadHistory().catch(() => {});
+      await loadScenarios(true).catch(() => {});
+      renderView();
+    } catch (e) {
+      err.textContent = "Network error: " + e.message;
+    }
+  },
+
+  async logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    this.user = null;
+    this.applyVisibility();
+    this.openModal({ mode: "login" });
+  },
+};
+
+// Avatar click → logout
+document.addEventListener("DOMContentLoaded", () => {
+  const av = document.getElementById("bb-avatar");
+  if (av) av.onclick = () => {
+    if (!auth.user) return auth.openModal({ mode: "login" });
+    if (confirm(`Sign out ${auth.user.username}?`)) auth.logout();
+  };
+});
+
+// ===========================================================================
+// View: Users (admin only)
+// ===========================================================================
+async function renderUsers() {
+  if (auth.user?.role !== "admin") {
+    $("#users-table").innerHTML = `<div class="empty-state" style="padding:32px"><p>Admin only.</p></div>`;
+    return;
+  }
+  const r = await fetch("/api/auth/users");
+  const { users } = await r.json();
+  $("#users-table").innerHTML = `<table class="dt">
+    <thead><tr>
+      <th>Username</th><th style="width:90px">Role</th>
+      <th>Created</th><th>Last login</th>
+      <th style="width:180px"></th>
+    </tr></thead>
+    <tbody>${users.map(u => `
+      <tr>
+        <td><strong>${escapeHTML(u.username)}</strong>${u.username === auth.user.username ? ' <span class="tag tag-green">you</span>' : ""}</td>
+        <td>${u.role === "admin" ? '<span class="tag tag-purp">admin</span>' : '<span class="tag">user</span>'}</td>
+        <td class="muted text-xs">${u.created_ts ? fmt.ago(new Date(u.created_ts * 1000)) : "—"}</td>
+        <td class="muted text-xs">${u.last_login_ts ? fmt.ago(new Date(u.last_login_ts * 1000)) : "never"}</td>
+        <td><div class="row-actions">
+          <button class="btn btn-sm btn-ghost" data-act="pw" data-name="${escapeHTML(u.username)}">Change password</button>
+          ${u.username !== auth.user.username ? `<button class="btn btn-sm btn-ghost" data-act="del" data-name="${escapeHTML(u.username)}">Delete</button>` : ""}
+        </div></td>
+      </tr>`).join("")}</tbody>
+  </table>`;
+  $("#users-table").querySelectorAll("button[data-act]").forEach(b => {
+    b.onclick = async () => {
+      const { act, name } = b.dataset;
+      if (act === "del") {
+        if (!confirm(`Delete user "${name}"? Their scenarios will remain but become unowned.`)) return;
+        await fetch(`/api/auth/users/${encodeURIComponent(name)}`, { method: "DELETE" });
+        renderUsers();
+      } else if (act === "pw") {
+        const pw = prompt(`New password for "${name}":`);
+        if (!pw) return;
+        const r = await fetch("/api/auth/password", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: name, new_password: pw }),
+        });
+        const d = await r.json();
+        if (d.error) alert(d.error); else alert("Password updated.");
+      }
+    };
+  });
+}
+
+// "+ Add user" button
+document.addEventListener("click", async e => {
+  if (e.target.id === "btn-add-user") {
+    if (auth.user?.role !== "admin") return;
+    const username = prompt("New username:");
+    if (!username) return;
+    const password = prompt(`Password for "${username}" (min 4 chars):`);
+    if (!password) return;
+    const role = confirm("Make this user an admin? (Cancel = regular user)") ? "admin" : "user";
+    const r = await fetch("/api/auth/register", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password, role }),
+    });
+    const d = await r.json();
+    if (d.error) alert("Failed: " + d.error); else { alert(`Created ${username} (${role}).`); renderUsers(); }
+  }
+});
+
+// ===========================================================================
 // Bootstrap
 // ===========================================================================
 (async function init() {
+  // Auth is the first thing we check. Everything else requires it.
+  await auth.refresh();
+  if (!auth.user) {
+    auth.openModal({ mode: auth.bootstrap ? "bootstrap" : "login" });
+    // Render minimum chrome so the page isn't blank behind the modal
+    if (!location.hash) location.hash = "#/dashboard";
+    return;
+  }
   await refreshEnvChip();
   await loadCatalog();
   await loadHistory();
