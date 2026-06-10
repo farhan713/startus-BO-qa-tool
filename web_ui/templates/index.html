@@ -565,11 +565,40 @@
           </div>
         </div>
 
+        <!-- Natural-language test authoring (no file needed) -->
+        <div class="tile mb-3" style="border-left:3px solid var(--c-brand)">
+          <div class="form-section">
+            <div class="flex items-center justify-between mb-2" style="flex-wrap:wrap; gap:8px">
+              <h3 class="h" style="margin:0">✨ Describe a test in plain English <span class="muted text-xs" style="font-weight:400">— no file needed</span></h3>
+              <span class="muted text-xs" id="nlgen-llm-status"></span>
+            </div>
+            <p class="sub" style="margin:0 0 10px">
+              Type what you want to test and name the screen — the tool generates a full,
+              runnable test plan from the live catalog (real field &amp; button ids), then
+              applies your instructions. Try
+              <code>test the customer list, search by name, screenshot after each click</code>.
+            </p>
+            <textarea id="nlgen-prompt" rows="4" style="width:100%; font-family:var(--f-sans); font-size:13px"
+              placeholder="e.g. test the receiptslist screen — search by every filter, open the action menu, screenshot after each click, skip P3"></textarea>
+            <div class="flex items-center gap-2 mt-2" style="flex-wrap:wrap">
+              <input type="text" id="nlgen-screen" placeholder="screen (optional — e.g. customerlist)"
+                     style="min-width:240px; font-size:13px; height:34px; padding:0 10px">
+              <label class="checkbox" id="nlgen-llm-wrap" style="opacity:.5">
+                <input type="checkbox" id="nlgen-use-llm" disabled>
+                <span>✨ Use AI (Gemini) for anything the rules can't handle</span>
+              </label>
+              <span class="spc flex-1"></span>
+              <button class="btn btn-primary" id="nlgen-go" type="button">Generate test plan</button>
+            </div>
+            <div id="nlgen-msg" class="muted text-xs mt-2"></div>
+          </div>
+        </div>
+
         <!-- Conversion instructions (prompt engine) -->
         <div class="tile mb-3">
           <div class="form-section">
             <div class="flex items-center justify-between mb-2" style="flex-wrap:wrap; gap:8px">
-              <h3 class="h" style="margin:0">Conversion instructions <span class="muted text-xs" style="font-weight:400">(optional)</span></h3>
+              <h3 class="h" style="margin:0">Or convert an Excel file <span class="muted text-xs" style="font-weight:400">— conversion instructions (optional)</span></h3>
               <span class="muted text-xs" id="conv-llm-status">Checking AI status…</span>
             </div>
             <p class="sub" style="margin:0 0 10px">
@@ -600,6 +629,33 @@
             <div class="text-lg fw-600" style="margin-bottom:4px">Drop your Excel here, or click to choose</div>
             <div class="muted text-xs">.xlsx · .xlsm — both the official template and legacy Celerant prose files are supported.</div>
             <input type="file" id="conv-file" accept=".xlsx,.xlsm" style="display:none">
+          </div>
+        </div>
+
+        <!-- Saved test cases — recall a test stored earlier and edit it in plain English -->
+        <div class="tile mb-5" style="border-left:3px solid var(--c-accent, #0e9488)">
+          <div class="tile-h">
+            <div>
+              <h2 class="t">📚 Saved test cases</h2>
+              <div class="s">After uploading or generating, hit <b>💾 Save to library</b>. Come back any day, recall a test, and change it in plain English — e.g. <i>“search by first name instead of last name”</i>.</div>
+            </div>
+            <div class="ac"><button class="btn btn-sm btn-ghost" id="saved-refresh" type="button">↻ Refresh</button></div>
+          </div>
+          <div class="tile-b">
+            <div id="saved-list" class="muted text-xs">Loading saved test cases…</div>
+            <div id="saved-editor" style="display:none; margin-top:14px; border-top:1px solid var(--c-border-2); padding-top:14px">
+              <div class="flex items-center justify-between mb-2" style="flex-wrap:wrap; gap:8px">
+                <h3 class="h" style="margin:0">Editing <code id="saved-current-id"></code> <span class="muted text-xs" id="saved-current-screen"></span></h3>
+                <button class="btn btn-sm btn-ghost" id="saved-close" type="button">✕ Close</button>
+              </div>
+              <textarea id="saved-prompt" rows="2" style="width:100%; font-family:var(--f-sans); font-size:13px"
+                placeholder="What do you want to change? e.g. search by first name instead of last name · search for Smith · also search by email · screenshot after each click"></textarea>
+              <div class="flex items-center gap-2 mt-2" style="flex-wrap:wrap">
+                <span class="muted text-xs" id="saved-msg"></span>
+                <span class="spc flex-1"></span>
+                <button class="btn btn-sm btn-primary" id="saved-apply" type="button">Apply &amp; preview</button>
+              </div>
+            </div>
           </div>
         </div>
 
