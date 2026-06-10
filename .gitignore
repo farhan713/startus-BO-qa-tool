@@ -15,6 +15,14 @@ reports/*
 # Process state
 .pids/
 
+# Per-user runtime data (the saved-test-cases library + directory) — generated,
+# not source. Only screens_catalog.json is the durable, shared Knowledge Base.
+knowledge_base/scenarios.json
+knowledge_base/directory.json
+
+# Local dev tooling (machine-specific launch config)
+.claude/
+
 # OS junk
 .DS_Store
 Thumbs.db

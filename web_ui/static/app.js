@@ -42,6 +42,8 @@ const state = {
   runStartedAt: null,
   runTimer: null,
   liveCounts: { pass: 0, fail: 0, total: 0 },
+  pendingCustomYaml: null,   // YAML handed off from the NL generator → One-screen run
+  pendingScreen: null,
 };
 
 // ===========================================================================
@@ -616,6 +618,22 @@ function renderNew(query={}) {
   if (query.screen) screenCombo.load().then(() => screenCombo.setValue(query.screen));
   applyModeUI();
   $$('input[name="mode"]').forEach(r => r.onchange = applyModeUI);
+  // If a test plan was generated from plain English and handed off via
+  // "Run now", drop it straight into the One-screen custom-YAML editor.
+  if (state.pendingCustomYaml) {
+    const ta = $("#single_custom_yaml");
+    if (ta) {
+      ta.value = state.pendingCustomYaml;
+      // Reveal the <details> wrapper so the YAML is visible.
+      const det = ta.closest("details"); if (det) det.open = true;
+      const status = $("#xlsx-status");
+      if (status) status.innerHTML =
+        `<b style="color:var(--c-success)">✓ Generated test plan loaded.</b> ` +
+        `Confirm the connection above, then click <b>Start test</b>.`;
+    }
+    state.pendingCustomYaml = null;
+    state.pendingScreen = null;
+  }
 }
 function applyModeUI() {
   const mode = ($('input[name="mode"]:checked') || {}).value;
@@ -954,20 +972,48 @@ function renderPromptChips() {
 
 function renderConverter() {
   renderPromptChips();
-  // Always refresh LLM status on view enter (fast endpoint)
+  // Always refresh LLM status on view enter (fast endpoint). Drives both the
+  // Excel-prompt toggle and the natural-language generator toggle.
   fetch("/api/llm-status").then(r => r.json()).then(s => {
-    const label = $("#conv-llm-status");
-    const cb = $("#conv-use-llm");
-    const wrap = $("#conv-llm-toggle-wrap");
-    if (s.configured) {
-      const remaining = Math.max(0, s.daily_limit - s.used_today);
-      label.innerHTML = `<span class="status success"><span class="dot"></span>AI ready · ${s.model} · ${remaining} requests left today</span>`;
-      cb.disabled = false; wrap.style.opacity = "1";
-    } else {
-      label.innerHTML = `<span class="muted">AI not configured — set <code>GEMINI_API_KEY</code> in <code>qa-automation/.env</code> to enable</span>`;
-      cb.disabled = true; cb.checked = false; wrap.style.opacity = ".5";
-    }
+    const setStatus = (labelSel, cbSel, wrapSel) => {
+      const label = $(labelSel), cb = $(cbSel), wrap = $(wrapSel);
+      if (!label) return;
+      if (s.configured) {
+        const remaining = Math.max(0, s.daily_limit - s.used_today);
+        label.innerHTML = `<span class="status success"><span class="dot"></span>AI ready · ${s.model} · ${remaining} requests left today</span>`;
+        if (cb) cb.disabled = false; if (wrap) wrap.style.opacity = "1";
+      } else {
+        label.innerHTML = `<span class="muted">AI optional — set <code>GEMINI_API_KEY</code> in <code>.env</code> to enable. Rules work without it.</span>`;
+        if (cb) { cb.disabled = true; cb.checked = false; } if (wrap) wrap.style.opacity = ".5";
+      }
+    };
+    setStatus("#conv-llm-status", "#conv-use-llm", "#conv-llm-toggle-wrap");
+    setStatus("#nlgen-llm-status", "#nlgen-use-llm", "#nlgen-llm-wrap");
   }).catch(() => {});
+
+  // Wire the natural-language generator (once).
+  const nlBtn = $("#nlgen-go");
+  if (nlBtn && !nlBtn._wired) {
+    nlBtn._wired = true;
+    nlBtn.onclick = generateFromNL;
+    const ta = $("#nlgen-prompt");
+    if (ta) ta.addEventListener("keydown", e => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") generateFromNL();
+    });
+  }
+
+  // Saved test cases library — recall + edit by natural language.
+  loadSavedTestcases();
+  const refreshBtn = $("#saved-refresh");
+  if (refreshBtn && !refreshBtn._wired) {
+    refreshBtn._wired = true;
+    refreshBtn.onclick = loadSavedTestcases;
+    $("#saved-close").onclick = () => { $("#saved-editor").style.display = "none"; };
+    $("#saved-apply").onclick = applySavedEdit;
+    $("#saved-prompt").addEventListener("keydown", e => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") applySavedEdit();
+    });
+  }
 
   // First render: wire the drop zone + file picker exactly once.
   const drop = $("#conv-drop");
@@ -1043,6 +1089,214 @@ function renderPromptPanel(summary) {
   $("#conv-prompt-panel").style.display = "";
 }
 
+// ---- Saved test cases library (stored in the scenario store) -------------
+let _savedCurrent = null;   // { id, screen } of the recalled test cases
+
+async function loadSavedTestcases() {
+  const list = $("#saved-list");
+  if (!list) return;
+  try {
+    const r = await fetch("/api/scenarios");
+    const data = await r.json();
+    const scns = data.scenarios || [];
+    if (!scns.length) {
+      list.innerHTML = `No saved test cases yet. Upload or generate a test plan above, then click <b>💾 Save to library</b>.`;
+      return;
+    }
+    list.innerHTML = `<table class="dt" style="margin:0"><thead><tr>` +
+      `<th>ID</th><th>Title</th><th>Screen</th><th>Saved</th><th></th></tr></thead><tbody>` +
+      scns.map(s => {
+        const when = s.created_ts ? new Date(s.created_ts * 1000).toLocaleDateString() : "—";
+        return `<tr>
+          <td><code>${escapeHTML(s.id)}</code></td>
+          <td>${escapeHTML(s.title || "")}</td>
+          <td>${s.screen ? `<code>${escapeHTML(s.screen)}</code>` : "—"}</td>
+          <td class="muted text-xs">${when}</td>
+          <td><button class="btn btn-sm" data-recall="${escapeHTML(s.id)}" data-screen="${escapeHTML(s.screen || "")}" type="button">Recall &amp; edit</button></td>
+        </tr>`;
+      }).join("") + `</tbody></table>`;
+    list.querySelectorAll("[data-recall]").forEach(b => {
+      b.onclick = () => recallSaved(b.dataset.recall, b.dataset.screen);
+    });
+  } catch (err) {
+    list.innerHTML = `<span style="color:var(--c-danger)">Couldn't load saved test cases: ${escapeHTML(err.message)}</span>`;
+  }
+}
+
+async function recallSaved(id, screen) {
+  try {
+    const r = await fetch(`/api/scenarios/${encodeURIComponent(id)}/yaml`);
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const yamlText = await r.text();
+    _savedCurrent = { id, screen };
+    // Show the recalled YAML in the shared result area.
+    showYamlResult(`📚 Saved test cases · ${id}`, screen ? `screen: ${screen}` : "", yamlText, screen, { savedId: id });
+    // Reveal the edit box.
+    $("#saved-current-id").textContent = id;
+    $("#saved-current-screen").textContent = screen ? `· ${screen}` : "";
+    $("#saved-msg").textContent = "";
+    $("#saved-prompt").value = "";
+    $("#saved-editor").style.display = "";
+    $("#saved-editor").scrollIntoView({ block: "nearest" });
+  } catch (err) {
+    $("#saved-msg").innerHTML = `<span style="color:var(--c-danger)">Recall failed: ${escapeHTML(err.message)}</span>`;
+  }
+}
+
+async function applySavedEdit() {
+  if (!_savedCurrent) return;
+  const prompt = ($("#saved-prompt").value || "").trim();
+  const msg = $("#saved-msg");
+  if (!prompt) { msg.innerHTML = `<span style="color:var(--c-warning)">Type what to change first.</span>`; return; }
+  msg.innerHTML = `<span class="muted">Applying…</span>`;
+  try {
+    const useLlm = ($("#nlgen-use-llm") || {}).checked || false;
+    const r = await fetch("/api/modify-testcases", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scenario_id: _savedCurrent.id, prompt, use_llm: useLlm }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || ("HTTP " + r.status));
+    showYamlResult(`✓ Edited · ${_savedCurrent.id}`,
+      `${data.n_tests} tests · screen ${data.screen || "?"}`, data.yaml, data.screen,
+      { savedId: _savedCurrent.id });
+    renderPromptPanel({ applied: data.applied, ignored: data.ignored,
+                        llm_used: data.llm_used, llm_error: data.llm_error });
+    msg.innerHTML = data.applied.length
+      ? `<span style="color:var(--c-success)">✓ ${data.applied.length} change${data.applied.length === 1 ? "" : "s"} applied.</span> Review below, then Run or Save.`
+      : `<span style="color:var(--c-warning)">No change matched.</span> ${data.catalog_known ? "" : "Catalog for this screen is unknown — rebuild it for field edits."} ${(data.ignored || []).length ? "Couldn't interpret: " + escapeHTML(data.ignored.join("; ")) : ""}`;
+  } catch (err) {
+    msg.innerHTML = `<span style="color:var(--c-danger)">${escapeHTML(err.message)}</span>`;
+  }
+}
+
+// Shared renderer for the result area (used by NL-generate, recall, and edit).
+// opts.savedId, when present, lets the Save button overwrite the same library entry.
+function showYamlResult(title, sub, yamlText, screen, opts = {}) {
+  const result = $("#conv-result");
+  result.style.display = "";
+  $("#conv-yaml").value = yamlText;
+  $("#conv-result-title").innerHTML = `<b>${escapeHTML(title)}</b>`;
+  $("#conv-result-sub").innerHTML = escapeHTML(sub);
+  $("#conv-prompt-panel").style.display = "none";
+  const acts = [];
+  if (screen) acts.push(`<button class="btn btn-sm btn-primary" id="res-run" type="button">▶ Run now</button>`);
+  acts.push(`<button class="btn btn-sm" id="res-dl" type="button">⬇ Download YAML</button>`);
+  acts.push(`<button class="btn btn-sm" id="res-save" type="button">💾 Save to library</button>`);
+  acts.push(`<button class="btn btn-sm btn-ghost" id="res-copy" type="button">📋 Copy</button>`);
+  $("#conv-result-actions").innerHTML = acts.join(" ");
+  if (screen) $("#res-run").onclick = () => {
+    state.pendingCustomYaml = $("#conv-yaml").value;   // use possibly-hand-edited text
+    state.pendingScreen = screen;
+    navigate(`#/new?preset=single&screen=${encodeURIComponent(screen)}`);
+  };
+  $("#res-dl").onclick = () => downloadText($("#conv-yaml").value,
+    `${opts.savedId || screen || "testcases"}.yaml`, "application/x-yaml");
+  $("#res-copy").onclick = async () => {
+    await navigator.clipboard.writeText($("#conv-yaml").value);
+    $("#res-copy").textContent = "✓ Copied";
+    setTimeout(() => { $("#res-copy").innerHTML = "📋 Copy"; }, 1500);
+  };
+  $("#res-save").onclick = () =>
+    promptSaveScenario($("#conv-yaml").value, opts.savedId || screen || "testcases",
+                       screen ? [screen] : []);
+  result.scrollIntoView({ block: "nearest" });
+}
+
+// Generate a runnable test plan from a plain-English description (no file).
+// Reuses the same result area as the Excel converter.
+async function generateFromNL() {
+  const prompt = ($("#nlgen-prompt") || {}).value.trim();
+  const screen = ($("#nlgen-screen") || {}).value.trim();
+  const useLlm = ($("#nlgen-use-llm") || {}).checked || false;
+  const msg = $("#nlgen-msg");
+  if (!prompt && !screen) {
+    msg.innerHTML = `<b style="color:var(--c-warning)">Describe what you want to test first.</b>`;
+    return;
+  }
+  msg.innerHTML = `<span class="muted">Generating from the catalog…</span>`;
+
+  const result = $("#conv-result");
+  result.style.display = "";
+  $("#conv-result-title").textContent = "Generating test plan…";
+  $("#conv-result-sub").textContent = "";
+  $("#conv-result-actions").innerHTML = "";
+  $("#conv-yaml").value = "";
+  $("#conv-prompt-panel").style.display = "none";
+
+  try {
+    const r = await fetch("/api/nl-to-yaml", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt, screen, use_llm: useLlm }),
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      // 422 → ambiguous screen: offer the candidate screens as quick-pick chips.
+      if (r.status === 422 && (data.candidates || []).length) {
+        msg.innerHTML = `<b style="color:var(--c-warning)">${escapeHTML(data.error)}</b><br>` +
+          `<span class="muted text-xs">Did you mean:</span> ` +
+          data.candidates.map(c =>
+            `<span class="prompt-chip" data-pick="${escapeHTML(c.screen)}" title="Use this screen">${escapeHTML(c.screen)}</span>`
+          ).join(" ");
+        msg.querySelectorAll("[data-pick]").forEach(el => {
+          el.onclick = () => { $("#nlgen-screen").value = el.dataset.pick; generateFromNL(); };
+        });
+        result.style.display = "none";
+        return;
+      }
+      throw new Error(data.error || ("HTTP " + r.status));
+    }
+
+    msg.innerHTML = "";
+    $("#conv-yaml").value = data.yaml;
+    renderPromptPanel(data.prompt);
+
+    $("#conv-result-title").innerHTML =
+      `✓ <b style="color:var(--c-success)">Test plan for <code>${escapeHTML(data.screen)}</code></b>`;
+    $("#conv-result-sub").innerHTML =
+      `<b>${data.n_tests}</b> test${data.n_tests === 1 ? "" : "s"} · ` +
+      `type <b>${escapeHTML(data.screen_type || "?")}</b> · ${data.n_fields} catalog fields · ` +
+      `<span class="muted text-xs">${escapeHTML(data.matched_how || "")}</span>`;
+
+    // If other screens also matched, offer them as one-click "wrong screen?" chips.
+    const others = (data.candidates || []).filter(c => c.screen !== data.screen);
+    $("#nlgen-msg").innerHTML = others.length
+      ? `<span class="muted text-xs">Wrong screen? Try:</span> ` + others.slice(0, 5).map(c =>
+          `<span class="prompt-chip" data-pick="${escapeHTML(c.screen)}">${escapeHTML(c.screen)}</span>`).join(" ")
+      : "";
+    $("#nlgen-msg").querySelectorAll("[data-pick]").forEach(el => {
+      el.onclick = () => { $("#nlgen-screen").value = el.dataset.pick; generateFromNL(); };
+    });
+
+    const acts = [];
+    acts.push(`<button class="btn btn-sm btn-primary" id="nlgen-run" type="button">▶ Run now</button>`);
+    acts.push(`<button class="btn btn-sm" id="conv-dl-yaml" type="button">⬇ Download YAML</button>`);
+    acts.push(`<button class="btn btn-sm" id="conv-save-scenario" type="button">💾 Save to library</button>`);
+    acts.push(`<button class="btn btn-sm btn-ghost" id="conv-copy" type="button">📋 Copy</button>`);
+    $("#conv-result-actions").innerHTML = acts.join(" ");
+
+    $("#nlgen-run").onclick = () => {
+      // Hand the YAML to One-screen mode, which has the connection form + runner.
+      state.pendingCustomYaml = data.yaml;
+      state.pendingScreen = data.screen;
+      navigate(`#/new?preset=single&screen=${encodeURIComponent(data.screen)}`);
+    };
+    $("#conv-dl-yaml").onclick = () => downloadText(
+      data.yaml, `${data.screen}_tests.yaml`, "application/x-yaml");
+    $("#conv-copy").onclick = async () => {
+      await navigator.clipboard.writeText(data.yaml);
+      $("#conv-copy").textContent = "✓ Copied";
+      setTimeout(() => { $("#conv-copy").innerHTML = "📋 Copy"; }, 1500);
+    };
+    $("#conv-save-scenario").onclick = () =>
+      promptSaveScenario(data.yaml, data.screen, [data.screen]);
+  } catch (err) {
+    msg.innerHTML = "";
+    $("#conv-result-title").innerHTML = `<b style="color:var(--c-danger)">Failed</b>`;
+    $("#conv-result-sub").textContent = err.message;
+  }
+}
+
 async function convertExcel(file) {
   _convLastFile = file;
   const result = $("#conv-result");
@@ -1093,7 +1347,7 @@ async function convertExcel(file) {
     const acts = [];
     acts.push(`<button class="btn btn-sm" id="conv-dl-yaml" type="button">⬇ Download YAML</button>`);
     if (n > 1) acts.push(`<button class="btn btn-sm" id="conv-dl-zip" type="button">⬇ Download ZIP (${n} files)</button>`);
-    acts.push(`<button class="btn btn-sm btn-primary" id="conv-save-scenario" type="button">💾 Save as scenario</button>`);
+    acts.push(`<button class="btn btn-sm btn-primary" id="conv-save-scenario" type="button">💾 Save to library</button>`);
     acts.push(`<button class="btn btn-sm btn-ghost" id="conv-copy" type="button">📋 Copy</button>`);
     $("#conv-result-actions").innerHTML = acts.join(" ");
 
@@ -1599,7 +1853,8 @@ customer_name=Smith"></textarea></div>
     if (!r.ok || j.error) { err.textContent = "Failed: " + (j.error || r.status); return; }
     document.getElementById("scn-save-modal").remove();
     await loadScenarios(true);
-    alert(`✓ Scenario "${id}" saved. Try it from the dashboard: "test ${id}"`);
+    if (typeof loadSavedTestcases === "function") loadSavedTestcases();
+    alert(`✓ Saved "${id}" to the library. Recall it any day from the YAML converter, or run it from the dashboard: "test ${id}"`);
   };
 }
 

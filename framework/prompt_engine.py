@@ -185,7 +185,8 @@ def _r_screenshot_after(m, doc):
     def fn(step, *_):
         nonlocal n
         act = step.get("action")
-        tgt = (step.get("target") or "").lower()
+        # target may be a non-string (e.g. wait steps use an int like 2) — coerce.
+        tgt = str(step.get("target") or "").lower()
         hit = (act == target_action) or (
             target_action in matches_label and act == "click"
             and matches_label[target_action]
@@ -210,6 +211,27 @@ def _r_wait_after(m, doc):
         return None
     _walk_steps(doc, fn)
     return f"inserted wait {seconds}s after {n} '{target_action}' step{'s' if n != 1 else ''}"
+
+
+def _r_assert_rows_after_search(m, doc):
+    """For every test that performs a Search, assert the grid came back with
+    at least one row — i.e. 'check that data is actually coming for each search'.
+    Idempotent: skips tests that already assert row counts."""
+    def _is_search_test(t):
+        for st in t.get("steps") or []:
+            if st.get("action") == "click" and "search" in str(st.get("target") or "").lower():
+                return True
+            if st.get("action") == "open_search":
+                return True
+        return False
+    n = 0
+    for t in doc.get("tests", []) or []:
+        steps = t.get("steps") or []
+        if _is_search_test(t) and not any(s.get("action") == "assert_rows_min" for s in steps):
+            steps.append({"action": "assert_rows_min", "target": 1})
+            t["steps"] = steps
+            n += 1
+    return f"asserted results returned (rows ≥ 1) on {n} search test{'s' if n != 1 else ''}"
 
 
 def _r_skip_priority(m, doc):
@@ -257,7 +279,7 @@ def _r_default_value_for(m, doc):
     def fn(step, *_):
         nonlocal n
         if (step.get("action") == "fill"
-                and step.get("target", "").strip().lower() == target_field.lower()
+                and str(step.get("target") or "").strip().lower() == target_field.lower()
                 and not step.get("value")):
             step["value"] = value; n += 1
         return None
@@ -328,6 +350,14 @@ RULES = [
     # ---- Wait after action
     (re.compile(r"\bwait\s+(\d+)\s*(?:s|sec|secs|second|seconds)?\s+(?:after\s+)?(?:every\s+|each\s+)?(click|fill|select|save|navigate)\b", re.I),
      _r_wait_after),
+
+    # ---- Assert search results came back ("check data is coming for each search",
+    #      "verify results show up", "make sure rows return").  After the prompt
+    #      normalizer, "checks"->"assert" and "wherever/each"->"every".
+    (re.compile(r"\b(?:data|results?|rows?|records?)\b.{0,30}?\b(?:com(?:e|ing)|return(?:ed|s)?|show(?:n|s)?|appear|load(?:ed|s)?|back|populat)\w*", re.I),
+     _r_assert_rows_after_search),
+    (re.compile(r"\b(?:assert|verify)\b.{0,20}?\b(?:data|results?|rows?|records?)\b", re.I),
+     _r_assert_rows_after_search),
 
     # ---- Skip / drop / exclude by priority (P1/P2/P3 — any case).
     # Tolerate words like "the", "tests", "ones" between the verb and the priority.

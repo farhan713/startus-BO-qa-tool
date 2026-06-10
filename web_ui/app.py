@@ -557,6 +557,226 @@ def _yaml_for_screen(entry: dict, safe_mode: bool = True) -> str:
     return header + body
 
 
+# Words that say nothing about *which* screen — never match on these.
+_SCREEN_STOPWORDS = {
+    "test", "check", "screen", "page", "module", "the", "and", "also",
+    "for", "each", "not", "working", "work", "search", "data", "api",
+    "call", "calls", "coming", "with", "run", "verify", "make", "sure",
+    "every", "all", "this", "that", "from", "into", "click", "fill",
+    "select", "save", "open", "show", "showing", "value", "field", "button",
+}
+
+
+def _resolve_screen_from_text(prompt: str, screens: list) -> tuple:
+    """Pick the catalog screen a plain-English request is talking about.
+
+    Signals, strongest first:
+      1. The exact screenname appears in the text (after stripping spaces/punct),
+         e.g. "test the customerlist" or "test the customer list".
+      2. Token match with the screen's screenname/label — a prompt word counts
+         as a hit if it equals a name token OR is a prefix of one (so "customer"
+         matches "customers"/"customerlist", "receipt" matches "receiptslist").
+         Stop-words ("test", "screen", "search"...) are ignored so only the
+         topical words decide.
+
+    Returns (entry|None, candidates[list of {screen,score}], how:str).
+    """
+    import re
+    p = (prompt or "").lower()
+    p_compact = re.sub(r"[^a-z0-9]", "", p)
+    p_words = {w for w in re.findall(r"[a-z0-9]{3,}", p)
+               if w not in _SCREEN_STOPWORDS}
+
+    def _hit(name_token: str) -> str | None:
+        """Return the prompt word that matches this name token, else None."""
+        for pw in p_words:
+            if name_token == pw:
+                return pw
+            if len(pw) >= 4 and (name_token.startswith(pw) or pw.startswith(name_token)):
+                return pw
+        return None
+
+    best, best_score, best_how = None, 0.0, ""
+    cands: list[dict] = []
+    for s in screens:
+        sn = (s.get("screenname") or "").lower()
+        label = (s.get("label") or "").lower()
+        score, how = 0.0, ""
+        if len(sn) >= 5 and sn in p_compact:
+            score, how = 1.0, f"screen name '{sn}' found in your text"
+        else:
+            name_tokens = [t for t in set(re.findall(r"[a-z0-9]{3,}", sn + " " + label))
+                           if len(t) >= 4]
+            if name_tokens:
+                matched = {nt: _hit(nt) for nt in name_tokens}
+                hit_words = {w for w in matched.values() if w}
+                if hit_words:
+                    hits = sum(1 for v in matched.values() if v)
+                    # Fraction of the screen's identity that the prompt covered,
+                    # lightly rewarded for matching more distinct prompt words.
+                    score = (hits / len(name_tokens)) * 0.8
+                    how = "matched on " + ", ".join(sorted(hit_words))
+        if score > 0:
+            cands.append({"screen": s.get("screenname"), "score": round(score, 2)})
+            if score > best_score:
+                best, best_score, best_how = s, score, how
+    cands.sort(key=lambda c: -c["score"])
+    if best is not None and best_score >= 0.4:
+        return best, cands[:6], f"{best_how} (confidence {best_score:.2f})"
+    return None, cands[:6], ""
+
+
+@app.route("/api/nl-to-yaml", methods=["POST"])
+def api_nl_to_yaml():
+    """Generate runnable YAML from a plain-English test description — no file.
+
+    POST JSON: { prompt, screen?, use_llm?, safe_mode? }
+
+    Pipeline:
+      1. Resolve which catalog screen the request is about (explicit `screen`
+         wins; otherwise infer from the text).
+      2. Generate the comprehensive auto-test plan for that screen
+         (test_generator — purely catalog-driven, real field/button ids).
+      3. Layer the user's plain-English refinements on top via the prompt
+         engine (rule engine + optional Gemini).
+
+    Returns { yaml, screen, screen_type, matched_how, candidates, n_fields,
+              prompt }  — the YAML is ready to run in One-screen mode.
+    """
+    from framework.prompt_engine import apply_prompt
+    data = request.get_json(force=True) or {}
+    prompt = (data.get("prompt") or "").strip()
+    explicit_screen = (data.get("screen") or "").strip()
+    use_llm = bool(data.get("use_llm"))
+    safe_mode = bool(data.get("safe_mode", True))
+
+    if not prompt and not explicit_screen:
+        return jsonify({"error": "Describe what to test — e.g. "
+                                 "\"test the customer list, search by name, screenshot after each click\"."}), 400
+
+    cat = load_catalog() or {}
+    screens = cat.get("screens") or []
+    if not screens:
+        return jsonify({"error": "No catalog yet. Run New run → Rebuild catalog first."}), 400
+
+    entry, candidates, matched_how = None, [], ""
+    if explicit_screen:
+        entry = next((s for s in screens
+                      if (s.get("screenname") or "").lower() == explicit_screen.lower()), None)
+        if entry is not None:
+            matched_how = f"you picked '{explicit_screen}'"
+    if entry is None:
+        entry, candidates, matched_how = _resolve_screen_from_text(prompt, screens)
+    if entry is None:
+        return jsonify({
+            "error": "Couldn't tell which screen you mean. Add the screen name "
+                     "(e.g. 'customerlist') or pick one from the suggestions.",
+            "candidates": candidates,
+        }), 422
+
+    sn = entry.get("screenname")
+    base_yaml = _yaml_for_screen(entry, safe_mode=safe_mode)
+    pr = apply_prompt(base_yaml, prompt, use_llm=use_llm)
+
+    import yaml as _yaml
+    try:
+        n_tests = len((_yaml.safe_load(pr.yaml_text) or {}).get("tests") or [])
+    except Exception:
+        n_tests = 0
+
+    return jsonify({
+        "yaml": pr.yaml_text,
+        "screen": sn,
+        "screen_type": entry.get("type"),
+        "matched_how": matched_how,
+        "candidates": candidates,
+        "n_fields": len(entry.get("fields") or []),
+        "n_tests": n_tests,
+        "prompt": {
+            "applied":     pr.applied,
+            "ignored":     pr.ignored,
+            "llm_used":    pr.llm_used,
+            "llm_error":   pr.llm_error,
+            "llm_changed": pr.llm_changed,
+        },
+    })
+
+
+def _catalog_entry(screenname: str) -> dict | None:
+    cat = load_catalog() or {}
+    for s in cat.get("screens") or []:
+        if (s.get("screenname") or "").lower() == (screenname or "").lower():
+            return s
+    return None
+
+
+@app.route("/api/modify-testcases", methods=["POST"])
+def api_modify_testcases():
+    """Apply a plain-English edit to a STORED (or supplied) set of test cases.
+
+    This is the day-2 flow: a tester recalls test cases saved earlier and tweaks
+    them — e.g. "search by first name instead of last name", "search for Smith",
+    "also screenshot after each click".
+
+    POST JSON (one source required):
+      { scenario_id, prompt, use_llm? }     — edit a saved scenario, or
+      { yaml, screen, prompt, use_llm? }    — edit YAML you pass in
+
+    Returns { yaml, screen, n_tests, applied, ignored, llm_used, llm_error }.
+    """
+    import yaml
+    from framework import scenario_store
+    from framework.testcase_editor import edit_testcases
+
+    data = request.get_json(force=True) or {}
+    prompt = (data.get("prompt") or "").strip()
+    use_llm = bool(data.get("use_llm"))
+    if not prompt:
+        return jsonify({"error": "Type what to change — e.g. "
+                                 "\"search by first name instead of last name\"."}), 400
+
+    scenario_id = (data.get("scenario_id") or "").strip()
+    if scenario_id:
+        s = scenario_store.get_scenario(scenario_id)
+        if not s:
+            return jsonify({"error": f"saved test cases '{scenario_id}' not found"}), 404
+        base_yaml = scenario_store.to_yaml_text(s)
+        screen = (s.get("screen") if isinstance(s, dict) else getattr(s, "screen", "")) or ""
+    else:
+        base_yaml = data.get("yaml") or ""
+        screen = (data.get("screen") or "").strip()
+        if not base_yaml.strip():
+            return jsonify({"error": "provide a scenario_id or yaml to edit"}), 400
+
+    # If we don't have an explicit screen, infer it from the first test block.
+    if not screen:
+        try:
+            doc = yaml.safe_load(base_yaml) or {}
+            screen = ((doc.get("tests") or [{}])[0] or {}).get("screen") or ""
+        except Exception:
+            screen = ""
+
+    entry = _catalog_entry(screen) if screen else None
+    res = edit_testcases(base_yaml, entry, prompt, use_llm=use_llm)
+
+    try:
+        n_tests = len((yaml.safe_load(res.yaml_text) or {}).get("tests") or [])
+    except Exception:
+        n_tests = 0
+
+    return jsonify({
+        "yaml":      res.yaml_text,
+        "screen":    screen,
+        "scenario_id": scenario_id or None,
+        "n_tests":   n_tests,
+        "applied":   res.applied,
+        "ignored":   res.ignored,
+        "llm_used":  res.llm_used,
+        "llm_error": res.llm_error,
+        "catalog_known": entry is not None,
+    })
+
+
 @app.route("/api/import-testcases", methods=["POST"])
 def api_import_testcases():
     """Accept an uploaded .xlsx of test cases and return YAML.
