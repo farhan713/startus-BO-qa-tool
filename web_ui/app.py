@@ -236,6 +236,19 @@ def index():
     )
 
 
+@app.route("/convert")
+def convert_screen():
+    """Convert Test Cases — the tool's main screen.
+
+    Turns a tester's manual test cases (Excel / pasted prose / a plain-English
+    description) into runnable YAML, asks about anything it couldn't work out,
+    then saves or runs it. All work is done by the existing APIs:
+    /api/import-testcases, /api/nl-to-yaml, /api/modify-testcases,
+    /api/scenarios and /api/run.
+    """
+    return render_template("convert.html")
+
+
 # ---------------------------------------------------------- run
 
 @app.route("/api/run", methods=["POST"])

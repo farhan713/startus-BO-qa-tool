@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Convert Test Cases — Stratus QA</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='convert.css') }}">
+</head>
+<body>
+
+<header class="appbar">
+  <div class="brand"><span class="logo">SQ</span> Stratus QA</div>
+  <nav>
+    <a href="/convert" class="on">Convert</a>
+    <a href="/">Run &amp; Reports</a>
+  </nav>
+  <div class="right">
+    <span class="who" id="who"></span>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="page-head">
+    <h1>Convert Test Cases</h1>
+    <p>Turn your manual test steps into an automatic test. No coding needed.</p>
+  </div>
+
+  <div class="stepper" id="stepper">
+    <div class="st on" data-step="1"><span class="n">1</span> Add your test steps</div>
+    <div class="st" data-step="2"><span class="n">2</span> Check the settings</div>
+    <div class="st" data-step="3"><span class="n">3</span> Convert &amp; review</div>
+  </div>
+
+  <div id="banner-slot"></div>
+
+  <!-- ══════════════ STAGE 1 + 2 ══════════════ -->
+  <div id="stage-input">
+    <div class="cols">
+      <div>
+
+        <div class="card">
+          <div class="card-h"><h2>How do you want to add your test steps?</h2></div>
+          <div class="card-b">
+            <div class="sources">
+              <div class="src on" data-src="upload">
+                <div class="ico">📄</div>
+                <div class="t">Upload a file</div>
+                <div class="d">The Excel test-case files you already write (.xlsx)</div>
+              </div>
+              <div class="src" data-src="paste">
+                <div class="ico">📋</div>
+                <div class="t">Paste your steps</div>
+                <div class="d">Copy from any document and paste here</div>
+              </div>
+              <div class="src" data-src="describe">
+                <div class="ico">💬</div>
+                <div class="t">Just describe it</div>
+                <div class="d">Type what to test in your own words</div>
+              </div>
+            </div>
+
+            <!-- upload -->
+            <div id="pane-upload">
+              <div class="drop" id="drop">
+                <div style="font-size:30px;margin-bottom:8px">☁️</div>
+                <div class="big">Drag your file here, or <a href="#" id="browse">choose from computer</a></div>
+                <div class="small">Works with Excel files (.xlsx) · one file can hold many test cases, even for different screens</div>
+                <div class="small" style="margin-top:6px">New here? <a href="/api/template/xlsx" id="tmpl">Download an example file</a> to see the format</div>
+              </div>
+              <input type="file" id="file" accept=".xlsx" class="hidden">
+              <div class="filerow hidden" id="filerow">
+                <span style="font-size:18px">✅</span>
+                <div>
+                  <div class="nm" id="fname">—</div>
+                  <div class="mt" id="fmeta">—</div>
+                </div>
+                <button class="x" id="fremove">Remove</button>
+              </div>
+            </div>
+
+            <!-- paste -->
+            <div id="pane-paste" class="hidden" style="margin-top:14px">
+              <textarea class="inp" id="paste" placeholder="Paste your steps here, for example:&#10;&#10;Screen: Customer List&#10;Step 1: Click New&#10;Step 2: Fill Last Name = SMITH&#10;Step 3: Click Save&#10;Expected: customer saves successfully"></textarea>
+              <div class="hint">We read plain English — write it the way you normally would.</div>
+            </div>
+
+            <!-- describe -->
+            <div id="pane-describe" class="hidden" style="margin-top:14px">
+              <textarea class="inp" id="describe" placeholder="Describe your test in your own words, for example:&#10;&#10;Test that I can search for a customer by last name on the customer list screen, open the first result, and check the details load."></textarea>
+              <div class="hint">The AI will work out which Stratus screen you mean and build the steps.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><h2>Check the settings</h2><span class="sub">— we filled these in for you</span></div>
+          <div class="card-b">
+
+            <div class="grid2">
+              <div class="field">
+                <label class="lb" for="testname">Test name</label>
+                <input class="inp" id="testname" placeholder="Will be filled from your file">
+                <div class="hint">So you can find it later in your library.</div>
+              </div>
+              <div class="field">
+                <label class="lb" for="ticket">Ticket number <span class="opt">(optional)</span></label>
+                <input class="inp" id="ticket" placeholder="e.g. STRAT-27678">
+                <div class="hint">Links this test to the ticket in reports.</div>
+              </div>
+            </div>
+
+            <div class="field">
+              <label class="lb" for="server">Where should the test run?</label>
+              <select class="inp" id="server"></select>
+              <div class="hint" id="serverhint">Tests run against a test server — the live store is never touched.</div>
+            </div>
+
+            <div class="field">
+              <label class="lb">How should it run?</label>
+              <div class="seg" id="mode">
+                <button data-mode="safe" class="on">Practice run — look, but change nothing</button>
+                <button data-mode="full">Full run — create and edit test data</button>
+              </div>
+              <div class="hint" id="modehint">Practice run is selected for you. It clicks through the screens without saving anything, so it's always safe to try.</div>
+            </div>
+
+            <div class="field" id="aifield">
+              <label class="lb">AI assistance</label>
+              <div class="seg" id="ai">
+                <button data-ai="1" class="on">Use AI for unclear steps</button>
+                <button data-ai="0">Rules only (no AI)</button>
+              </div>
+              <div class="hint" id="aihint">—</div>
+            </div>
+
+          </div>
+        </div>
+
+        <button class="btn primary lg" id="convert" disabled>Convert my test cases &nbsp;→</button>
+        <div class="savedline">Takes about a minute. Nothing will run until you press Run yourself.</div>
+      </div>
+
+      <!-- side -->
+      <div class="side">
+        <div class="card">
+          <div class="card-h"><h2>What happens when you press Convert?</h2></div>
+          <div class="card-b">
+            <div class="flow">
+              <div class="it"><span class="num">1</span><div><b>We read your steps</b> — exactly as you wrote them, row by row.</div></div>
+              <div class="it"><span class="num">2</span><div><b>We find the right screens</b> — matched against the catalog of Stratus BackOffice screens.</div></div>
+              <div class="it"><span class="num">3</span><div><b>We build the automatic test</b> — clicks, typing and checks, done by the computer.</div></div>
+              <div class="it"><span class="num">4</span><div><b>We ask if we're unsure</b> — anything unclear becomes a simple question for you. Nothing is skipped silently.</div></div>
+            </div>
+            <div class="note">You can always change things afterwards — nothing is final until you press Run.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ STAGE: CONVERTING ══════════════ -->
+  <div id="stage-progress" class="hidden">
+    <div class="card">
+      <div class="card-b">
+        <div class="prog">
+          <div class="prow" id="p1"><span class="ic">1</span><span><b>Reading your steps…</b></span></div>
+          <div class="prow" id="p2"><span class="ic">2</span><span><b>Understanding what you wrote…</b></span></div>
+          <div class="prow" id="p3"><span class="ic">3</span><span><b>Matching steps to Stratus screens…</b></span></div>
+          <div class="prow" id="p4"><span class="ic">4</span><span><b>Building your automatic test…</b></span></div>
+          <div class="bar"><i id="bar"></i></div>
+          <div class="ptxt" id="ptxt">Starting…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ STAGE: RESULT ══════════════ -->
+  <div id="stage-result" class="hidden">
+    <div class="verdict" id="verdict">
+      <div class="mark" id="vmark">✓</div>
+      <div>
+        <h3 id="vtitle">—</h3>
+        <p id="vsub">—</p>
+      </div>
+      <div class="chips" id="vchips"></div>
+    </div>
+
+    <div id="questions-wrap" class="hidden">
+      <div class="card">
+        <div class="card-h"><h2 id="qhead">Help us with these steps</h2><span class="sub">answer in your own words, or skip</span></div>
+        <div class="card-b" id="questions"></div>
+      </div>
+    </div>
+
+    <button class="acc" id="acc">
+      <span id="accLabel">See the steps we understood</span>
+      <span class="chip ok">ready to run</span>
+    </button>
+    <div class="accbody hidden" id="accbody"></div>
+
+    <div style="text-align:right;margin-top:10px">
+      <button class="linkish" id="codetoggle">Show &amp; edit the technical file (for developers)</button>
+    </div>
+    <div class="codewrap hidden" id="codewrap">
+      <div class="codebar"><span>The automatic test file (YAML)</span><span class="tagx" id="codestate">View only</span></div>
+      <textarea class="code" id="code" readonly spellcheck="false"></textarea>
+      <div class="codeacts">
+        <button class="cbtn" id="cedit">✎ Let me edit this file</button>
+        <button class="cbtn go hidden" id="csave">✓ Save my changes</button>
+        <button class="cbtn hidden" id="cundo">Undo my changes</button>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn primary" id="run">▶ Run the test now</button>
+      <button class="btn" id="save">Save to my library</button>
+      <button class="btn" id="download">Download the file</button>
+      <button class="btn ghost" id="startover">Start over</button>
+    </div>
+    <div class="savedline" id="savedline">Your work stays on this page until you leave it.</div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+<script src="{{ url_for('static', filename='convert.js') }}"></script>
+</body>
+</html>
