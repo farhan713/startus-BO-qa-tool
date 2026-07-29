@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stratus QA — Convert Screen (Interactive Demo)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,sans-serif;font-size:13px;color:#111;background:#e9e9e7;padding:26px 0 80px}
+.page{max-width:1000px;margin:0 auto;padding:0 20px}
+.demobar{background:#0f62fe;color:#fff;border-radius:8px;padding:10px 16px;font-size:12px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.demobar small{font-weight:500;opacity:.85}
+.wf{border:2px solid #333;border-radius:10px;background:#f7f7f5;padding:22px;position:relative}
+.wf-title{font-size:17px;font-weight:800}
+.wf-sub{font-size:11.5px;color:#777;margin-top:2px}
+
+/* rail */
+.rail{display:flex;border:1.5px solid #bbb;background:#fff;margin:16px 0;border-radius:8px;overflow:hidden}
+.rail .st{flex:1;display:flex;align-items:center;gap:8px;padding:11px 14px;font-size:11.5px;color:#999;border-right:1px solid #e2e2e2;cursor:not-allowed;user-select:none}
+.rail .st:last-child{border-right:none}
+.rail .st.on{color:#111;font-weight:700;background:#f0f0ee}
+.rail .st.done{color:#111;cursor:pointer}
+.rail .st.done:hover{background:#f6f6f4}
+.rail .num{width:22px;height:22px;border:1.5px solid currentColor;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex-shrink:0}
+.rail .st.on .num{background:#111;color:#fff;border-color:#111}
+.rail .st.done .num{background:#0a7d4d;border-color:#0a7d4d;color:#fff}
+
+/* cards/inputs */
+.card{background:#fff;border:1.5px solid #bbb;border-radius:8px;padding:16px;margin-bottom:14px}
+.card-t{font-size:12px;font-weight:800;margin-bottom:10px}
+.grid2{display:grid;grid-template-columns:1.6fr 1fr;gap:14px;align-items:start}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.pick{border:2px solid #bbb;border-radius:8px;background:#fff;padding:14px;text-align:center;cursor:pointer;transition:.12s}
+.pick:hover{border-color:#666}
+.pick.on{border-color:#111;background:#f4f4f2;box-shadow:0 2px 0 #111}
+.pick i{font-size:26px;color:#666;display:block;margin-bottom:6px}
+.pick .pt{font-size:12px;font-weight:800}
+.pick .ps{font-size:10.5px;color:#888;margin-top:3px;line-height:1.45}
+.drop{border:2.5px dashed #aaa;border-radius:8px;background:#fcfcfa;padding:28px 16px;text-align:center;margin-top:12px;cursor:pointer;transition:.12s}
+.drop:hover{border-color:#333;background:#fff}
+.drop i{font-size:32px;color:#bbb;display:block;margin-bottom:8px}
+.drop .dt{font-size:13.5px;font-weight:750}
+.drop .ds{font-size:11px;color:#999;margin-top:4px}
+.drop .link{color:#111;text-decoration:underline;font-weight:600}
+.paste-ta{width:100%;min-height:130px;border:1.5px solid #bbb;border-radius:8px;padding:11px;font-size:12px;font-family:monospace;color:#444;margin-top:12px;line-height:1.7}
+.filechip{display:flex;align-items:center;gap:10px;border:1.5px solid #333;border-radius:7px;background:#fff;padding:9px 12px;margin-top:10px}
+.filechip i{font-size:18px;color:#0a7d4d}
+.filechip .fn{font-size:12px;font-weight:700}
+.filechip .fm{font-size:10.5px;color:#888}
+.filechip .rm{margin-left:auto;font-size:10.5px;color:#999;text-decoration:underline;cursor:pointer}
+label.f{display:block;font-size:11px;font-weight:700;color:#444;margin:12px 0 4px}
+label.f small{font-weight:500;color:#999}
+.inp{width:100%;border:1.5px solid #bbb;border-radius:6px;background:#fff;padding:9px 11px;font-size:12px;color:#333;font-family:inherit}
+.sel{display:flex;align-items:center;justify-content:space-between;border:1.5px solid #bbb;border-radius:6px;background:#fff;padding:9px 11px;font-size:12px;cursor:pointer}
+.sel:hover{border-color:#666}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#10b981;margin-right:7px}
+.hint{font-size:10.5px;color:#999;margin-top:4px;line-height:1.5}
+.toggle{display:flex;border:1.5px solid #bbb;border-radius:7px;overflow:hidden;margin-top:2px}
+.toggle .opt{flex:1;padding:10px 12px;font-size:11.5px;text-align:center;color:#888;background:#fff;cursor:pointer;transition:.1s}
+.toggle .opt.on{background:#111;color:#fff;font-weight:700}
+.bigbtn{display:block;width:100%;background:#111;color:#fff;border:none;border-radius:8px;padding:15px;font-size:14px;font-weight:800;cursor:pointer;margin-top:16px;font-family:inherit;transition:.15s}
+.bigbtn:disabled{background:#c9c9c5;cursor:not-allowed}
+.reassure{text-align:center;font-size:11px;color:#999;margin-top:8px}
+.help{background:#fbfbf9;border:1.5px solid #ddd;border-radius:8px;padding:14px}
+.help .ht{font-size:11.5px;font-weight:800;margin-bottom:10px}
+.hstep{display:flex;gap:9px;margin-bottom:10px;font-size:11.5px;color:#555;line-height:1.5}
+.hstep i{font-size:15px;color:#888;flex-shrink:0;margin-top:1px}
+.help .foot{font-size:10.5px;color:#999;border-top:1px dashed #ddd;padding-top:9px;margin-top:4px}
+
+/* progress */
+.prog{max-width:560px;margin:0 auto;padding:16px 0}
+.prow{display:flex;align-items:center;gap:11px;padding:10px 4px;font-size:12.5px;color:#aaa}
+.prow .ic{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;border:1.5px dashed #bbb;color:#bbb}
+.prow.done{color:#111}
+.prow.done .ic{background:#111;color:#fff;border:none}
+.prow.doing{color:#111}
+.prow.doing .ic{border:2px solid #111;color:#111}
+.prow.doing .ic i{animation:spin 1s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+.pbar{height:7px;background:#e5e5e2;border-radius:4px;margin:14px 0 6px;overflow:hidden}
+.pbar>div{height:100%;width:0%;background:#111;border-radius:4px;transition:width .5s}
+.ptext{text-align:center;font-size:11px;color:#888}
+.cancel{display:block;text-align:center;font-size:11px;color:#999;text-decoration:underline;cursor:pointer;margin-top:12px}
+
+/* results */
+.verdict{display:flex;align-items:center;gap:14px;background:#fff;border:2px solid #111;border-radius:9px;padding:16px;flex-wrap:wrap}
+.verdict .big{font-size:15px;font-weight:800}
+.verdict .sub{font-size:11.5px;color:#777;margin-top:2px}
+.chip{display:inline-flex;align-items:center;gap:5px;border-radius:14px;padding:4px 11px;font-size:11px;font-weight:700}
+.chip.ok{background:#eafaf1;color:#0a7d4d;border:1px solid #bfe8d2}
+.chip.warn{background:#fff7e6;color:#a16207;border:1px solid #f2dfa9}
+.chip.skip{background:#f0f0ee;color:#888;border:1px solid #ddd}
+.qhead{margin:16px 0 8px;font-size:12.5px;font-weight:800}
+.qcard{border:1.5px solid #e6c15a;background:#fffdf5;border-radius:8px;padding:13px 15px;margin-bottom:10px;transition:.2s}
+.qcard.fixed{border-color:#bfe8d2;background:#f4fbf7}
+.qcard.skipped{opacity:.55}
+.qcard .orig{font-size:11px;color:#888;font-style:italic;margin-bottom:6px}
+.qcard .q{font-size:12.5px;font-weight:700;margin-bottom:8px}
+.qcard .row{display:flex;gap:8px}
+.qcard .inp{flex:1}
+.qbtn{border:1.5px solid #111;background:#111;color:#fff;border-radius:6px;padding:8px 14px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap}
+.qskip{border:none;background:none;font-size:10.5px;color:#999;text-decoration:underline;cursor:pointer;margin-top:6px}
+.fixednote{font-size:12px;font-weight:700;color:#0a7d4d;display:flex;align-items:center;gap:6px}
+.skipnote{font-size:12px;font-weight:700;color:#888}
+.acc{border:1.5px solid #ccc;border-radius:8px;background:#fff;padding:11px 14px;font-size:12px;font-weight:700;color:#444;display:flex;justify-content:space-between;cursor:pointer;margin:12px 0 0}
+.acc:hover{border-color:#888}
+.accbody{background:#fff;border:1.5px solid #eee;border-top:none;border-radius:0 0 8px 8px;display:none}
+.accbody.open{display:block}
+.steprow{display:flex;align-items:center;gap:9px;padding:7px 12px;border-bottom:1px solid #eee;font-size:12px;color:#444}
+.steprow:last-child{border-bottom:none}
+.steprow i{color:#0a7d4d}
+.tech{display:none;background:#151515;color:#9fdc9f;border-radius:8px;padding:14px;font-family:monospace;font-size:11px;line-height:1.8;margin-top:8px;white-space:pre;overflow-x:auto}
+.tech.open{display:block}
+.techtoggle{font-size:10.5px;color:#999;text-decoration:underline;cursor:pointer;text-align:right;display:block;margin:10px 2px 0}
+.actions{display:flex;gap:9px;margin-top:14px}
+.abtn{flex:1;border:1.5px solid #111;border-radius:7px;padding:12px;font-size:12px;font-weight:800;text-align:center;cursor:pointer;background:#fff;transition:.12s}
+.abtn:hover{background:#f0f0ee}
+.abtn.primary{background:#111;color:#fff}
+.abtn.primary:hover{background:#000}
+.abtn.ghost{border-color:#bbb;color:#888;font-weight:600}
+.autosave{text-align:center;font-size:10.5px;color:#aaa;margin-top:10px}
+.stale{display:none;background:#fff7e6;border:1.5px solid #e6c15a;border-radius:7px;padding:9px 13px;font-size:11.5px;color:#a16207;font-weight:600;margin-top:12px}
+.stale.show{display:block}
+
+/* toast */
+
+/* ── explanation layer ── */
+.b{display:none;min-width:20px;height:20px;background:#c81e1e;color:#fff;border-radius:50%;align-items:center;justify-content:center;font-size:10px;font-weight:800;margin-right:6px;flex-shrink:0;padding:0 3px;vertical-align:middle}
+body.explain .b{display:inline-flex}
+.exp{display:none;background:#fff8f8;border-left:3px solid #c81e1e;border-radius:0 6px 6px 0;padding:9px 12px;margin:7px 0 12px;font-size:11.5px;line-height:1.6;color:#444}
+body.explain .exp{display:block}
+.exp b{color:#111}
+.exp .en{display:inline-flex;min-width:19px;height:19px;background:#c81e1e;color:#fff;border-radius:50%;align-items:center;justify-content:center;font-size:9.5px;font-weight:800;margin-right:6px;padding:0 3px}
+.expbtn{margin-left:auto;background:#fff;color:#0f62fe;border:none;border-radius:6px;padding:6px 13px;font-size:11.5px;font-weight:800;cursor:pointer;font-family:inherit}
+.expbtn.on{background:#c81e1e;color:#fff}
+
+
+/* demo jump shortcuts */
+.jump{display:flex;gap:5px;align-items:center;margin-left:14px}
+.jump span{font-size:10.5px;opacity:.8;font-weight:600}
+.jump button{background:rgba(255,255,255,.18);color:#fff;border:1px solid rgba(255,255,255,.35);border-radius:5px;padding:4px 9px;font-size:10.5px;font-weight:700;cursor:pointer;font-family:inherit}
+.jump button:hover{background:rgba(255,255,255,.32)}
+/* editable technical file */
+.techwrap{display:none;border:1.5px solid #333;border-radius:8px;overflow:hidden;margin-top:8px}
+.techwrap.open{display:block}
+.techbar{display:flex;align-items:center;justify-content:space-between;background:#151515;color:#ddd;padding:9px 13px;font-size:11.5px;font-weight:700}
+.techstatus{font-size:10px;font-weight:700;padding:3px 9px;border-radius:12px;background:#333;color:#bbb}
+.techstatus.editing{background:#0a7d4d;color:#fff}
+.techarea{width:100%;min-height:190px;background:#151515;color:#9fdc9f;border:none;padding:14px;font-family:'SF Mono',Menlo,monospace;font-size:11.5px;line-height:1.75;resize:vertical;display:block}
+.techarea:focus{outline:2px solid #0a7d4d;outline-offset:-2px}
+.techarea[readonly]{opacity:.85}
+.techactions{display:flex;gap:8px;background:#1e1e1e;padding:10px 13px}
+.tbtn{border:1.5px solid #555;background:#2a2a2a;color:#eee;border-radius:6px;padding:7px 14px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit}
+.tbtn:hover{background:#383838}
+.tbtn.go{background:#0a7d4d;border-color:#0a7d4d;color:#fff}
+.technote{background:#fbfbf9;border-top:1px solid #ddd;padding:9px 13px;font-size:10.5px;color:#888;line-height:1.6}
+
+#toast{position:fixed;bottom:34px;left:50%;transform:translateX(-50%);background:#111;color:#fff;font-size:12px;font-weight:600;padding:10px 20px;border-radius:8px;opacity:0;pointer-events:none;transition:.25s;z-index:99;max-width:80vw;text-align:center}
+#toast.show{opacity:1}
+.hidden{display:none!important}
+@media(max-width:760px){.grid2,.grid3{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="demobar"><i class="ti ti-hand-click"></i> Interactive demo — everything is clickable. <small>Try: pick an input method → click the drop zone → Convert → answer or skip the questions → Run.</small><div class="jump"><span>Jump to:</span><button onclick="jump(1)">1 · Start</button><button onclick="jump(2)">2 · Converting</button><button onclick="jump(3)">3 · Review</button></div><button class="expbtn" id="expbtn" onclick="toggleExplain()">💡 Show explanations</button></div>
+
+<div class="wf">
+  <div class="wf-title"><span class="b">1</span>Convert Test Cases</div>
+  <div class="wf-sub">Turn your manual test steps into an automatic test. No coding needed.</div>
+<div class="exp"><span class="en">1</span><b>Title + one-line promise.</b> Says what the page does in plain words — no jargon like "YAML" or "pipeline". A first-time user knows within 3 seconds whether they are in the right place.</div>
+
+  <div class="exp"><span class="en">2</span><b>3-step progress rail.</b> Shows the whole journey up front: Add steps → Check settings → Convert &amp; review. Ticks are automatic. <b>Completed steps are clickable</b> to go back (everything is preserved); future steps are never clickable, so there are no empty dead-ends. Change anything after converting and step 3 un-ticks — a stale result can never be run. <i>Try clicking a green step.</i></div>
+<div class="rail" id="rail">
+    <div class="st on" id="r1" onclick="railClick(1)"><span class="num" id="n1">1</span> Add your test steps</div>
+    <div class="st" id="r2" onclick="railClick(2)"><span class="num" id="n2">2</span> Check the settings</div>
+    <div class="st" id="r3" onclick="railClick(3)"><span class="num" id="n3">3</span> Convert &amp; review</div>
+  </div>
+
+  <!-- ═══════ STATE A ═══════ -->
+  <div id="stateA">
+    <div class="grid2">
+      <div>
+        <div class="card">
+          <div class="card-t"><span class="b">3</span>How do you want to add your test steps?</div>
+<div class="exp"><span class="en">3</span><b>A question, not a menu.</b> Three big cards instead of hidden tabs — the tester picks whichever matches how they already work today.</div>
+          <div class="grid3">
+            <div class="pick on" id="pk-upload" onclick="pickMethod('upload')"><i class="ti ti-file-spreadsheet"></i><div class="pt">Upload a file</div><div class="ps">The Excel test-case files you already write (.xlsx)</div></div>
+            <div class="pick" id="pk-paste" onclick="pickMethod('paste')"><i class="ti ti-clipboard-text"></i><div class="pt">Paste your steps</div><div class="ps">Copy from any document and paste here</div></div>
+            <div class="pick" id="pk-describe" onclick="pickMethod('describe')"><i class="ti ti-message-2"></i><div class="pt">Just describe it</div><div class="ps">Type what to test in your own words</div></div>
+          </div>
+
+          <div class="exp"><span class="en">4</span><b>The three input methods.</b> <b>Upload a file</b> — the Excel (.xlsx) test-case files testers already write. <b>Paste your steps</b> — for steps living in emails or Word. <b>Just describe it</b> — plain English, no format at all. The chosen card gets a dark border. <i>Try clicking each one.</i></div>
+<div id="pane-upload">
+            <div class="drop" onclick="addFile()">
+              <i class="ti ti-cloud-upload"></i>
+              <div class="dt">Drag your file here, or <span class="link">choose from computer</span></div>
+              <div class="ds">Works with Excel files (.xlsx) · one file can hold many test cases, even for different screens</div>
+              <div class="ds" style="margin-top:6px">New here? <span class="link" onclick="event.stopPropagation();toast('Example file downloaded — open it to see how test cases are written')">Download an example file</span></div>
+            </div>
+            <div class="exp"><span class="en">5</span><b>Drop zone.</b> Big target, two ways in (drag, or click to browse), file type stated plainly. <span class="en">6</span><b>"Download an example file"</b> — the best helper for a first-timer: a ready-made sample so they never wonder "am I doing this right?"</div>
+<div class="filechip hidden" id="filechip">
+              <i class="ti ti-file-check"></i>
+              <div><div class="fn">STRAT-27678 Edit Color.xlsx</div><div class="fm">3 test cases found · ticket STRAT-27678 detected automatically</div></div>
+              <span class="rm" onclick="removeFile()">Remove</span>
+            </div>
+          </div>
+
+          <div class="exp"><span class="en">7</span><b>Added-file row.</b> Instant feedback: file name, <b>how many test cases we found inside</b>, and the ticket number auto-detected from the file name. A quiet "Remove" undo — mistakes are cheap.</div>
+<div id="pane-paste" class="hidden">
+            <textarea class="paste-ta" placeholder="Paste your steps here, for example:&#10;&#10;Screen: Product List&#10;Step 1: Click New&#10;Step 2: Fill Style = AUTOTEST-001&#10;Expected: product saves successfully" onclick="event.stopPropagation()" oninput="pasteTyped(this)"></textarea>
+          </div>
+
+          <div id="pane-describe" class="hidden">
+            <textarea class="paste-ta" placeholder="Describe your test in your own words, for example:&#10;&#10;Test that I can create a new customer with name and phone number, and that the customer shows up when I search for them." oninput="pasteTyped(this)"></textarea>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-t"><span class="b">8</span>Check the settings <span style="font-weight:500;color:#999">— we filled these in for you</span></div>
+<div class="exp"><span class="en">8</span><b>"We filled these in for you".</b> The framing matters: the user <b>checks</b> settings, never <b>fills in</b> settings. Everything below is pre-filled — they can simply scroll past.</div>
+
+          <label class="f">Test name</label>
+          <input class="inp" id="fname" value="" placeholder="Will be filled from your file" onchange="markDirty()">
+          <div class="hint">So you can find it later. We took this from your file — change it if you like.</div>
+<div class="exp"><span class="en">9</span><b>Test name.</b> Auto-filled from the file name. Exists only so the test is findable later in the library. Editable, never required.</div>
+
+          <label class="f">Ticket number <small>(optional)</small></label>
+          <input class="inp" id="fticket" value="" placeholder="e.g. STRAT-12345" onchange="markDirty()">
+          <div class="hint">Found in your file name. Links this test to the ticket so reports show what was tested.</div>
+<div class="exp"><span class="en">10</span><b>Ticket number.</b> Auto-detected (e.g. STRAT-27678). Connects the test to the ticket so release reports prove what was tested. Clearly marked optional.</div>
+
+          <label class="f">Where should the test run?</label>
+          <div class="sel" onclick="cycleServer()"><span id="servertxt"><span class="dot"></span>Test server (safe — not the real store data)</span><i class="ti ti-chevron-down" style="color:#aaa"></i></div>
+          <div class="hint">Tests always run on a practice copy of the system. The live store is never touched.</div>
+<div class="exp"><span class="en">11</span><b>Server picker.</b> Friendly names + a health dot instead of IP addresses. The helper line answers the #1 fear of a non-technical user — <i>am I going to break the real system?</i> Answer: never. <i>Try clicking it to see a busy server.</i></div>
+
+          <label class="f">How should it run?</label>
+          <div class="toggle">
+            <div class="opt on" id="mode-safe" onclick="setMode('safe')">Practice run — look, but change nothing</div>
+            <div class="opt" id="mode-full" onclick="setMode('full')">Full run — create and edit test data</div>
+          </div>
+          <div class="exp"><span class="en">12</span><b>Practice run / Full run.</b> Instead of technical "read-only vs write mode", the words describe <b>consequences</b>. The safe option is pre-selected. <i>Try switching it — the hint text changes too.</i></div>
+<div class="hint" id="modehint">Practice run is selected for you. It clicks through the screens without saving anything, so it's always safe to try.</div>
+        </div>
+
+        <div class="stale" id="stale"><i class="ti ti-alert-triangle"></i> You changed something after converting — press Convert again so the result matches.</div>
+        <button class="bigbtn" id="convertbtn" onclick="convert()" disabled>Convert my test cases &nbsp;→</button>
+        <div class="reassure">Takes about a minute. Nothing will run until you press Run yourself.</div>
+<div class="exp"><span class="en">13</span><b>The one big button.</b> The only dark, full-width button on the page — there is never a question about what to press next. It stays disabled until there is something to convert. <span class="en">14</span><b>Reassurance line</b> — tells them the cost (a minute) and that pressing it triggers nothing scary.</div>
+      </div>
+
+      <div>
+        <div class="exp"><span class="en">15</span><b>"What happens when you press Convert?"</b> Explains the magic in four plain sentences — read, find, build, ask. Builds trust before the first click; experienced users just ignore it.</div>
+<div class="help">
+          <div class="ht">What happens when you press Convert?</div>
+          <div class="hstep"><i class="ti ti-eyeglass"></i><div><b>We read your steps</b> — exactly as you wrote them, row by row.</div></div>
+          <div class="hstep"><i class="ti ti-map-pin"></i><div><b>We find the right screens</b> — the tool knows every screen in Stratus BackOffice.</div></div>
+          <div class="hstep"><i class="ti ti-settings-automation"></i><div><b>We build the automatic test</b> — clicks, typing and checks, done by the computer.</div></div>
+          <div class="hstep"><i class="ti ti-help-circle"></i><div><b>We ask if we're unsure</b> — anything unclear becomes a simple question for you. Nothing is skipped silently.</div></div>
+          <div class="foot">You can always change things afterwards — nothing is final until you press Run.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ STATE B ═══════ -->
+  <div id="stateB" class="hidden">
+    <div class="prog">
+      <div class="prow" id="p1"><span class="ic"><i class="ti ti-point"></i></span><span><b>Reading your file</b> — looking for test cases…</span></div>
+      <div class="prow" id="p2"><span class="ic"><i class="ti ti-point"></i></span><span><b>Understanding your steps</b> — written in plain English…</span></div>
+      <div class="prow" id="p3"><span class="ic"><i class="ti ti-point"></i></span><span><b>Matching steps to Stratus screens</b>…</span></div>
+      <div class="prow" id="p4"><span class="ic"><i class="ti ti-point"></i></span><span><b>Building your automatic test</b>…</span></div>
+      <div class="exp"><span class="en">16</span><b>Progress told as a story.</b> Four human sentences ticking off one by one — each also quietly confirms the tool understood the input ("found 3 test cases with 22 steps"), so the tester spots a wrong file immediately.</div>
+<div class="pbar"><div id="bar"></div></div>
+      <div class="ptext" id="ptext">Starting…</div>
+      <div class="exp"><span class="en">17</span><b>Progress bar + time left</b> — "you can keep working, we'll be here" tells them waiting is optional. <span class="en">18</span><b>Cancel</b> — small and quiet but always there; cancelling loses nothing, the file stays attached.</div>
+<span class="cancel" onclick="cancelConvert()">Cancel</span>
+    </div>
+  </div>
+
+  <!-- ═══════ STATE C ═══════ -->
+  <div id="stateC" class="hidden">
+    <div class="verdict">
+      <i class="ti ti-circle-check" style="font-size:30px"></i>
+      <div>
+        <div class="big" id="verdicttxt">Done! We understood 19 of your 22 steps.</div>
+        <div class="sub" id="verdictsub">3 steps need a quick answer from you — see below. Everything is saved.</div>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:7px" id="chips">
+        <span class="chip ok"><i class="ti ti-check"></i> <span id="okcount">19</span> ready</span>
+        <span class="chip warn" id="warnchip"><i class="ti ti-help-circle"></i> <span id="warncount">3</span> need you</span>
+      </div>
+    </div>
+
+    <div class="exp"><span class="en">19</span><b>Result in one sentence.</b> "We understood 19 of your 22 steps" — not a percentage, not a "confidence score". Green chip = ready, amber chip = needs you. It celebrates what worked before pointing at what didn't. <i>These numbers update live as you answer.</i></div>
+<div class="qhead" id="qhead">Help us with these 3 steps</div>
+
+    <div class="exp"><span class="en">20</span><b>"Help us with these 3 steps".</b> Unclear steps are framed as <b>the tool asking for help</b> — not the user having made errors. This flips the feeling from "I failed" to "it needs me".</div>
+<div class="qcard" id="q1">
+      <div class="orig">Your step said: “Select Brand = DISNEY [detail form]”</div>
+      <div class="q"><i class="ti ti-help-circle"></i> Which screen is the “Brand” box on? We couldn't find it by ourselves.</div>
+      <div class="row"><input class="inp" placeholder="Type your answer, e.g. “It's the Brand dropdown on the product detail page”"><button class="qbtn" onclick="fixQ('q1')">That fixes it</button></div>
+      <button class="qskip" onclick="skipQ('q1')">Skip for now — run the test without this step</button>
+    </div>
+
+    <div class="exp"><span class="en">21</span><b>Question card.</b> Shows <b>the tester's original sentence</b> (so they recognise it), <b>one specific question</b>, and a box where they answer <b>in their own words</b> — the AI turns that answer into the technical fix. <span class="en">22</span><b>"Skip for now"</b> — every question is skippable; the test still runs and the report lists the skip. Nobody is ever blocked. <i>Try both buttons.</i></div>
+<div class="qcard" id="q2">
+      <div class="orig">Your step said: “Fill search = BLUE”</div>
+      <div class="q"><i class="ti ti-help-circle"></i> We found two search boxes on the Color screen — which one did you mean?</div>
+      <div class="row"><input class="inp" placeholder="e.g. “The one at the top, next to the Search button”"><button class="qbtn" onclick="fixQ('q2')">That fixes it</button></div>
+      <button class="qskip" onclick="skipQ('q2')">Skip for now — run the test without this step</button>
+    </div>
+
+    <div class="qcard" id="q3">
+      <div class="orig">Your step said: “Check DB ATTR1 = RED”</div>
+      <div class="q"><i class="ti ti-help-circle"></i> Should we check the database after this step, or is looking at the screen enough?</div>
+      <div class="row"><input class="inp" placeholder="e.g. “Yes, check the database too”"><button class="qbtn" onclick="fixQ('q3')">That fixes it</button></div>
+      <button class="qskip" onclick="skipQ('q3')">Skip for now — run the test without this step</button>
+    </div>
+
+    <div class="acc" onclick="toggleAcc()"><span><i class="ti ti-chevron-down" id="accicon"></i>&nbsp; See the <span id="acccount">19</span> steps we understood</span><span class="chip ok">all good</span></div>
+    <div class="accbody" id="accbody">
+      <div class="steprow"><i class="ti ti-check"></i> Step 1 — Open the <b>Products</b> screen</div>
+      <div class="steprow"><i class="ti ti-check"></i> Step 2 — Click the <b>New</b> button</div>
+      <div class="steprow"><i class="ti ti-check"></i> Step 3 — Type <b>“AUTOTEST-001”</b> into the <b>Style</b> box</div>
+      <div class="steprow"><i class="ti ti-check"></i> Step 4 — Press <b>Save</b> and wait for “Saved” message</div>
+      <div class="steprow"><i class="ti ti-check"></i> Step 5 — Open the <b>Color Runs</b> screen</div>
+      <div class="steprow" style="color:#aaa">… 14 more steps</div>
+    </div>
+
+    <div class="exp"><span class="en">23</span><b>"See the steps we understood"</b> — success is folded away by default; open it only if you want. <span class="en">24</span>Inside, each step is written back <b>in plain English</b> ("Type AUTOTEST-001 into the Style box") so a tester can proofread the automation <b>without reading code</b>. This is the trust-builder.</div>
+<span class="techtoggle" onclick="toggleTech()"><i class="ti ti-code"></i> Show &amp; edit the technical file (for developers)</span>
+    <div class="techwrap" id="tech">
+      <div class="techbar"><span><i class="ti ti-file-code"></i> &nbsp;The automatic test file</span><span class="techstatus" id="techstatus">View only</span></div>
+      <textarea class="techarea" id="techarea" readonly spellcheck="false">tests:
+  - screen: productlist
+    name: "Edit Color — STRAT-27678"
+    steps:
+      - { action: click,  target: New }
+      - { action: fill,   target: Style, value: "AUTOTEST-001" }
+      - { action: click,  target: Save }
+      - { action: assert_no_errors }
+      - { action: screenshot, target: "product_saved" }</textarea>
+      <div class="techactions">
+        <button class="tbtn" id="tedit" onclick="editYaml()"><i class="ti ti-pencil"></i> Let me edit this file</button>
+        <button class="tbtn go hidden" id="tsave" onclick="saveYaml()"><i class="ti ti-check"></i> Save my changes</button>
+        <button class="tbtn hidden" id="tundo" onclick="undoYaml()">Undo my changes</button>
+      </div>
+      <div class="technote">Most testers never open this. It's here for developers, or when you want to fine-tune something by hand — your edits are checked before saving, and you can always undo.</div>
+    </div>
+
+    <div class="exp"><span class="en">25</span><b>"Show &amp; edit the technical file".</b> The YAML exists — but behind one small link, so non-technical users never see a line of code. Open it and it is <b>view-only by default</b> (safe to look). Press <b>"Let me edit this file"</b> and it becomes editable for developers or power users who want to fine-tune by hand, with <b>Save</b> and <b>Undo</b>. <i>Try it — open, edit, then undo.</i></div>
+<div class="actions">
+      <div class="abtn primary" onclick="toast('▶ Test started on the Test server — watch it in Run on Server (demo)')"><i class="ti ti-player-play"></i> Run the test now</div>
+      <div class="abtn" onclick="toast('Saved to your library — find it any time under “Scenarios” (demo)')">Save to my library</div>
+      <div class="abtn ghost" onclick="startOver()">Start over</div>
+    </div>
+    <div class="exp"><span class="en">26</span><b>Three finish actions.</b> <b>Run the test now</b> (dark = the natural next step), <b>Save to my library</b> (keep it for a release), <b>Start over</b> (quiet grey, no harm). One obvious choice, two safe alternatives. <span class="en">27</span><b>Autosave note</b> — removes the last anxiety: nothing is lost by walking away.</div>
+<div class="autosave"><i class="ti ti-device-floppy"></i> Saved automatically — you can close this page and come back anytime.</div>
+  </div>
+
+</div><!-- /wf -->
+</div>
+
+<div id="toast"></div>
+
+<script>
+let hasInput = false, converted = false, dirty = false, method = 'upload';
+let okC = 19, warnC = 3, skipC = 0;
+
+function toast(m){
+  const t = document.getElementById('toast');
+  t.textContent = m; t.classList.add('show');
+  clearTimeout(t._h); t._h = setTimeout(()=>t.classList.remove('show'), 2600);
+}
+function show(id){ ['stateA','stateB','stateC'].forEach(s=>document.getElementById(s).classList.toggle('hidden', s!==id)); }
+
+/* ── rail ── */
+function railSet(active){
+  const done1 = hasInput, done2 = hasInput, done3 = converted && !dirty;
+  [[1,done1],[2,done2],[3,done3]].forEach(([n,done])=>{
+    const el = document.getElementById('r'+n), num = document.getElementById('n'+n);
+    el.classList.toggle('on', n===active);
+    el.classList.toggle('done', done && n!==active);
+    num.innerHTML = (done && n!==active) ? '<i class="ti ti-check"></i>' : n;
+  });
+}
+function railClick(n){
+  const el = document.getElementById('r'+n);
+  if (el.classList.contains('on')) return;
+  if (!el.classList.contains('done')){          // forward click — never allowed
+    if (n===3) toast('Convert first — then the review appears here');
+    if (n===2 && !hasInput) toast('Add your test steps first — everything else is already filled in');
+    return;
+  }
+  show('stateA'); railSet(hasInput ? 2 : 1);     // back click — return to the form, preserved
+}
+
+/* ── input methods ── */
+function pickMethod(m){
+  method = m;
+  ['upload','paste','describe'].forEach(x=>{
+    document.getElementById('pk-'+x).classList.toggle('on', x===m);
+    document.getElementById('pane-'+x).classList.toggle('hidden', x!==m);
+  });
+}
+function addFile(){
+  document.getElementById('filechip').classList.remove('hidden');
+  document.getElementById('fname').value = 'Edit Color — STRAT-27678';
+  document.getElementById('fticket').value = 'STRAT-27678';
+  hasInput = true; markDirtyIfConverted();
+  document.getElementById('convertbtn').disabled = false;
+  railSet(2);
+  toast('File added — 3 test cases found. Settings filled in for you ✓');
+}
+function removeFile(){
+  document.getElementById('filechip').classList.add('hidden');
+  hasInput = false; document.getElementById('convertbtn').disabled = true;
+  markDirtyIfConverted(); railSet(1);
+}
+function pasteTyped(ta){
+  const has = ta.value.trim().length > 10;
+  if (has && !hasInput){ hasInput = true; document.getElementById('convertbtn').disabled = false;
+    document.getElementById('fname').value = 'My pasted test'; railSet(2); }
+  if (!has && hasInput && method!=='upload'){ hasInput=false; document.getElementById('convertbtn').disabled = true; railSet(1); }
+  markDirtyIfConverted();
+}
+
+/* ── settings ── */
+const servers = ['<span class="dot"></span>Test server (safe — not the real store data)',
+                 '<span class="dot" style="background:#f59e0b"></span>QA-2 server (busy right now — refresh at 11:00)'];
+let srv = 0;
+function cycleServer(){ srv = (srv+1)%servers.length; document.getElementById('servertxt').innerHTML = servers[srv]; markDirty(); }
+function setMode(m){
+  document.getElementById('mode-safe').classList.toggle('on', m==='safe');
+  document.getElementById('mode-full').classList.toggle('on', m==='full');
+  document.getElementById('modehint').textContent = m==='safe'
+    ? "Practice run is selected for you. It clicks through the screens without saving anything, so it's always safe to try."
+    : 'Full run will create and edit practice data on the test server. The live store is still never touched.';
+  markDirty();
+}
+function markDirty(){ markDirtyIfConverted(); }
+function markDirtyIfConverted(){
+  if (!converted) return;
+  dirty = true;
+  document.getElementById('stale').classList.add('show');
+  document.getElementById('convertbtn').textContent = 'Convert again  →';
+  railSet(2);
+}
+
+/* ── convert (state B) ── */
+let timers = [];
+function convert(){
+  if (!hasInput) return;
+  show('stateB'); railSet(3);
+  const rows=['p1','p2','p3','p4'], bar=document.getElementById('bar'), pt=document.getElementById('ptext');
+  rows.forEach(r=>{ const el=document.getElementById(r); el.className='prow'; el.querySelector('.ic').innerHTML='<i class="ti ti-point"></i>'; });
+  bar.style.width='2%';
+  const script=[
+    [300 ,()=>{ step('p1','doing'); pt.textContent='Reading your file…'; bar.style.width='15%'; }],
+    [1300,()=>{ step('p1','done','Read your file — found 3 test cases with 22 steps'); step('p2','doing'); bar.style.width='40%'; pt.textContent='Understanding your steps…'; }],
+    [2400,()=>{ step('p2','done','Understood your steps — written in plain English, got it'); step('p3','doing'); bar.style.width='70%'; pt.textContent='Matching step 14 of 22…'; }],
+    [3600,()=>{ step('p3','done','Matched your steps to real Stratus screens'); step('p4','doing'); bar.style.width='90%'; pt.textContent='Almost there…'; }],
+    [4500,()=>{ step('p4','done','Built your automatic test'); bar.style.width='100%'; pt.textContent='Done!'; }],
+    [5100,()=>{ converted = true; dirty = false; resetResults(); show('stateC'); railSet(3);
+               document.getElementById('stale').classList.remove('show');
+               document.getElementById('convertbtn').textContent='Convert my test cases  →'; }]
+  ];
+  timers.forEach(clearTimeout); timers = script.map(([d,f])=>setTimeout(f,d));
+}
+function step(id, cls, text){
+  const el=document.getElementById(id); el.className='prow '+cls;
+  el.querySelector('.ic').innerHTML = cls==='done' ? '<i class="ti ti-check"></i>' : '<i class="ti ti-loader-2"></i>';
+  if (text) el.querySelector('span:last-child').innerHTML = '<b>'+text+'</b>';
+}
+function cancelConvert(){ timers.forEach(clearTimeout); show('stateA'); railSet(2); toast('Cancelled — your file is still here, nothing was lost'); }
+
+/* ── results (state C) ── */
+function resetResults(){
+  okC=19; warnC=3; skipC=0; refreshVerdict();
+  ['q1','q2','q3'].forEach(id=>{
+    const c=document.getElementById(id); c.className='qcard';
+    c.querySelector('.row').style.display='flex';
+    const sk=c.querySelector('.qskip'); if(sk) sk.style.display='inline';
+    const note=c.querySelector('.fixednote,.skipnote'); if(note) note.remove();
+    const inp=c.querySelector('input'); if(inp) inp.value='';
+  });
+  document.getElementById('accbody').classList.remove('open');
+  document.getElementById('tech').classList.remove('open');
+}
+function refreshVerdict(){
+  document.getElementById('okcount').textContent = okC;
+  document.getElementById('warncount').textContent = warnC;
+  document.getElementById('acccount').textContent = okC;
+  document.getElementById('warnchip').style.display = warnC ? 'inline-flex' : 'none';
+  const v=document.getElementById('verdicttxt'), s=document.getElementById('verdictsub'), qh=document.getElementById('qhead');
+  if (warnC===0){
+    v.textContent = skipC ? `Ready! ${okC} steps will run (${skipC} skipped by you).` : `Perfect — all ${okC} steps are ready to run!`;
+    s.textContent = 'Press “Run the test now” whenever you like.';
+    qh.textContent = skipC ? 'All questions answered or skipped ✓' : 'All questions answered ✓';
+  } else {
+    v.textContent = `Done! We understood ${okC} of your 22 steps.`;
+    s.textContent = `${warnC} step${warnC>1?'s':''} need a quick answer from you — see below. Everything is saved.`;
+    qh.textContent = `Help us with these ${warnC} steps`;
+  }
+}
+function fixQ(id){
+  const c=document.getElementById(id);
+  const val=c.querySelector('input').value.trim();
+  if (!val){ toast('Type a quick answer first — in your own words is fine'); return; }
+  c.classList.add('fixed');
+  c.querySelector('.row').style.display='none';
+  c.querySelector('.qskip').style.display='none';
+  const d=document.createElement('div'); d.className='fixednote';
+  d.innerHTML='<i class="ti ti-circle-check"></i> Fixed — we updated the step from your answer';
+  c.appendChild(d);
+  warnC--; okC++; refreshVerdict();
+  toast('Step fixed ✓ Your answer was turned into the technical fix automatically');
+}
+function skipQ(id){
+  const c=document.getElementById(id);
+  c.classList.add('skipped');
+  c.querySelector('.row').style.display='none';
+  c.querySelector('.qskip').style.display='none';
+  const d=document.createElement('div'); d.className='skipnote';
+  d.innerHTML='Skipped — the test will run without this step (shown in the report)';
+  c.appendChild(d);
+  warnC--; skipC++; refreshVerdict();
+}
+function toggleAcc(){ document.getElementById('accbody').classList.toggle('open');
+  document.getElementById('accicon').className = document.getElementById('accbody').classList.contains('open') ? 'ti ti-chevron-up' : 'ti ti-chevron-down'; }
+function toggleTech(){ document.getElementById('tech').classList.toggle('open'); }
+let yamlBackup = null;
+function editYaml(){
+  const a=document.getElementById('techarea');
+  yamlBackup = a.value; a.readAttribute = null; a.removeAttribute('readonly'); a.focus();
+  document.getElementById('techstatus').textContent='Editing';
+  document.getElementById('techstatus').classList.add('editing');
+  document.getElementById('tedit').classList.add('hidden');
+  document.getElementById('tsave').classList.remove('hidden');
+  document.getElementById('tundo').classList.remove('hidden');
+  toast('You can now edit the file directly — Save or Undo when done');
+}
+function saveYaml(){
+  const a=document.getElementById('techarea');
+  a.setAttribute('readonly','readonly');
+  document.getElementById('techstatus').textContent='View only';
+  document.getElementById('techstatus').classList.remove('editing');
+  document.getElementById('tedit').classList.remove('hidden');
+  document.getElementById('tsave').classList.add('hidden');
+  document.getElementById('tundo').classList.add('hidden');
+  toast('Changes saved ✓ Your edited file will be used when you press Run');
+}
+function undoYaml(){
+  const a=document.getElementById('techarea');
+  if (yamlBackup !== null) a.value = yamlBackup;
+  a.setAttribute('readonly','readonly');
+  document.getElementById('techstatus').textContent='View only';
+  document.getElementById('techstatus').classList.remove('editing');
+  document.getElementById('tedit').classList.remove('hidden');
+  document.getElementById('tsave').classList.add('hidden');
+  document.getElementById('tundo').classList.add('hidden');
+  toast('Changes undone — back to the file we generated');
+}
+/* demo-only shortcut so every stage can be shown without completing the flow */
+function jump(n){
+  timers.forEach(clearTimeout);
+  if (n===1){ show('stateA'); railSet(hasInput?2:1); toast('Stage 1 — the screen as it first opens'); return; }
+  if (n===2){
+    if(!hasInput) addFile();
+    convert(); toast('Stage 2 — watch the conversion, then it lands on Review');
+    return;
+  }
+  if (n===3){
+    if(!hasInput) addFile();
+    converted = true; dirty = false; resetResults(); show('stateC'); railSet(3);
+    document.getElementById('stale').classList.remove('show');
+    toast('Stage 3 — the review screen, where you answer the questions');
+  }
+}
+function startOver(){
+  converted=false; dirty=false; hasInput=false;
+  document.getElementById('filechip').classList.add('hidden');
+  document.getElementById('fname').value=''; document.getElementById('fticket').value='';
+  document.getElementById('convertbtn').disabled = true;
+  document.getElementById('convertbtn').textContent='Convert my test cases  →';
+  document.getElementById('stale').classList.remove('show');
+  show('stateA'); railSet(1);
+}
+function toggleExplain(){
+  const on = document.body.classList.toggle('explain');
+  document.getElementById('expbtn').classList.toggle('on', on);
+  document.getElementById('expbtn').textContent = on ? '✕ Hide explanations' : '💡 Show explanations';
+  toast(on ? 'Explanations on — every field now explains itself' : 'Explanations hidden — clean demo view');
+}
+railSet(1);
+</script>
+</body>
+</html>

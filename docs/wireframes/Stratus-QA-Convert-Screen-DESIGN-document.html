@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stratus QA — Convert Screen Wireframe (Detailed)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,sans-serif;font-size:13px;color:#111;background:#e9e9e7;padding:30px 0 80px}
+.page{max-width:1060px;margin:0 auto;padding:0 20px}
+
+/* ── doc header ── */
+.doc-head{background:#1a1a1a;color:#fff;padding:22px 26px;border-radius:10px 10px 0 0}
+.doc-head h1{font-size:19px;font-weight:800;margin-bottom:4px}
+.doc-head p{font-size:12px;color:#bbb;max-width:70ch}
+.doc-body{background:#fff;border:2px solid #1a1a1a;border-top:none;border-radius:0 0 10px 10px;padding:26px}
+
+/* ── section titles ── */
+h2.sec{font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;margin:34px 0 6px;padding-bottom:6px;border-bottom:2px solid #111}
+h2.sec:first-of-type{margin-top:0}
+p.secsub{font-size:12px;color:#777;margin-bottom:14px}
+
+/* ── wireframe canvas ── */
+.wf{border:2px solid #333;background:#f7f7f5;padding:22px;position:relative;margin-bottom:10px}
+.wf-title{font-size:17px;font-weight:800}
+.wf-sub{font-size:11.5px;color:#777;margin-top:2px}
+.statechip{position:absolute;top:-13px;left:14px;background:#111;color:#fff;font-size:10px;font-weight:800;letter-spacing:.6px;padding:4px 12px;border-radius:14px;text-transform:uppercase}
+
+/* steps rail */
+.rail{display:flex;gap:0;border:1.5px solid #bbb;background:#fff;margin:16px 0;border-radius:8px;overflow:hidden}
+.rail .st{flex:1;display:flex;align-items:center;gap:8px;padding:11px 14px;font-size:11.5px;color:#999;border-right:1px solid #e2e2e2}
+.rail .st:last-child{border-right:none}
+.rail .st.on{color:#111;font-weight:700;background:#f0f0ee}
+.rail .num{width:22px;height:22px;border:1.5px solid currentColor;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex-shrink:0}
+.rail .st.on .num{background:#111;color:#fff;border-color:#111}
+
+/* cards / inputs */
+.card{background:#fff;border:1.5px solid #bbb;border-radius:8px;padding:16px;margin-bottom:14px}
+.card-t{font-size:12px;font-weight:800;margin-bottom:10px;display:flex;align-items:center;gap:7px}
+.grid2{display:grid;grid-template-columns:1.6fr 1fr;gap:14px;align-items:start}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.pick{border:2px solid #bbb;border-radius:8px;background:#fff;padding:14px;text-align:center;cursor:pointer}
+.pick.on{border-color:#111;background:#f4f4f2;box-shadow:0 2px 0 #111}
+.pick i{font-size:26px;color:#666;display:block;margin-bottom:6px}
+.pick .pt{font-size:12px;font-weight:800}
+.pick .ps{font-size:10.5px;color:#888;margin-top:3px;line-height:1.45}
+.drop{border:2.5px dashed #aaa;border-radius:8px;background:#fcfcfa;padding:30px 16px;text-align:center;margin-top:12px}
+.drop i{font-size:32px;color:#bbb;display:block;margin-bottom:8px}
+.drop .dt{font-size:13.5px;font-weight:750}
+.drop .ds{font-size:11px;color:#999;margin-top:4px}
+.drop .link{color:#111;text-decoration:underline;cursor:pointer;font-weight:600}
+.filechip{display:flex;align-items:center;gap:10px;border:1.5px solid #333;border-radius:7px;background:#fff;padding:9px 12px;margin-top:10px}
+.filechip i{font-size:18px;color:#444}
+.filechip .fn{font-size:12px;font-weight:700}
+.filechip .fm{font-size:10.5px;color:#888}
+.filechip .rm{margin-left:auto;font-size:10.5px;color:#999;text-decoration:underline;cursor:pointer}
+label.f{display:block;font-size:11px;font-weight:700;color:#444;margin:12px 0 4px}
+label.f small{font-weight:500;color:#999}
+.inp{width:100%;border:1.5px solid #bbb;border-radius:6px;background:#fff;padding:9px 11px;font-size:12px;color:#333}
+.inp.ph{color:#aaa}
+.sel{display:flex;align-items:center;justify-content:space-between;border:1.5px solid #bbb;border-radius:6px;background:#fff;padding:9px 11px;font-size:12px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#10b981;margin-right:7px}
+.hint{font-size:10.5px;color:#999;margin-top:4px;line-height:1.5}
+.toggle{display:flex;border:1.5px solid #bbb;border-radius:7px;overflow:hidden;margin-top:2px}
+.toggle .opt{flex:1;padding:10px 12px;font-size:11.5px;text-align:center;color:#888;background:#fff;cursor:pointer}
+.toggle .opt.on{background:#111;color:#fff;font-weight:700}
+.bigbtn{display:block;width:100%;background:#111;color:#fff;border:none;border-radius:8px;padding:15px;font-size:14px;font-weight:800;cursor:pointer;margin-top:16px;font-family:inherit}
+.reassure{text-align:center;font-size:11px;color:#999;margin-top:8px}
+
+/* help panel */
+.help{background:#fbfbf9;border:1.5px solid #ddd;border-radius:8px;padding:14px}
+.help .ht{font-size:11.5px;font-weight:800;margin-bottom:10px}
+.hstep{display:flex;gap:9px;margin-bottom:10px;font-size:11.5px;color:#555;line-height:1.5}
+.hstep i{font-size:15px;color:#888;flex-shrink:0;margin-top:1px}
+.help .foot{font-size:10.5px;color:#999;border-top:1px dashed #ddd;padding-top:9px;margin-top:4px}
+
+/* progress state */
+.prog{max-width:560px;margin:0 auto;padding:16px 0}
+.prow{display:flex;align-items:center;gap:11px;padding:10px 4px;font-size:12.5px}
+.prow .ic{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0}
+.prow.done .ic{background:#111;color:#fff}
+.prow.doing .ic{border:2px solid #111;color:#111}
+.prow.todo{color:#aaa}
+.prow.todo .ic{border:1.5px dashed #bbb;color:#bbb}
+.pbar{height:7px;background:#e5e5e2;border-radius:4px;margin:14px 0 6px;overflow:hidden}
+.pbar>div{height:100%;width:64%;background:#111;border-radius:4px}
+.ptext{text-align:center;font-size:11px;color:#888}
+
+/* results */
+.verdict{display:flex;align-items:center;gap:14px;background:#fff;border:2px solid #111;border-radius:9px;padding:16px}
+.verdict .big{font-size:15px;font-weight:800}
+.verdict .sub{font-size:11.5px;color:#777;margin-top:2px}
+.chip{display:inline-flex;align-items:center;gap:5px;border-radius:14px;padding:4px 11px;font-size:11px;font-weight:700}
+.chip.ok{background:#eafaf1;color:#0a7d4d;border:1px solid #bfe8d2}
+.chip.warn{background:#fff7e6;color:#a16207;border:1px solid #f2dfa9}
+.qcard{border:1.5px solid #e6c15a;background:#fffdf5;border-radius:8px;padding:13px 15px;margin-bottom:10px}
+.qcard .orig{font-size:11px;color:#888;font-style:italic;margin-bottom:6px}
+.qcard .q{font-size:12.5px;font-weight:700;margin-bottom:8px}
+.qcard .row{display:flex;gap:8px}
+.qcard .inp{flex:1}
+.qbtn{border:1.5px solid #111;background:#111;color:#fff;border-radius:6px;padding:8px 14px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap}
+.qskip{border:none;background:none;font-size:10.5px;color:#999;text-decoration:underline;cursor:pointer;margin-top:6px}
+.acc{border:1.5px solid #ccc;border-radius:8px;background:#fff;padding:11px 14px;font-size:12px;font-weight:700;color:#444;display:flex;justify-content:space-between;cursor:pointer;margin-bottom:10px}
+.steprow{display:flex;align-items:center;gap:9px;padding:7px 12px;border-bottom:1px solid #eee;font-size:12px;color:#444}
+.steprow i{color:#0a7d4d}
+.actions{display:flex;gap:9px;margin-top:14px}
+.abtn{flex:1;border:1.5px solid #111;border-radius:7px;padding:12px;font-size:12px;font-weight:800;text-align:center;cursor:pointer;background:#fff}
+.abtn.primary{background:#111;color:#fff}
+.abtn.ghost{border-color:#bbb;color:#888;font-weight:600}
+.autosave{text-align:center;font-size:10.5px;color:#aaa;margin-top:10px}
+.techtoggle{font-size:10.5px;color:#999;text-decoration:underline;cursor:pointer;text-align:right;display:block;margin:6px 2px}
+
+/* ── annotation badges ── */
+.tag{position:relative}
+.b{position:absolute;min-width:21px;height:21px;background:#c81e1e;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:800;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.35);z-index:5;padding:0 3px}
+.b.tl{top:-9px;left:-9px}.b.tr{top:-9px;right:-9px}
+
+/* ── explanation table ── */
+table.ex{width:100%;border-collapse:collapse;font-size:12px;margin:8px 0 20px}
+table.ex th{background:#111;color:#fff;text-align:left;padding:8px 11px;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px}
+table.ex td{border:1px solid #ddd;padding:9px 11px;vertical-align:top;line-height:1.55}
+table.ex td:first-child{width:36px;text-align:center}
+table.ex .n{display:inline-flex;min-width:21px;height:21px;background:#c81e1e;color:#fff;border-radius:50%;align-items:center;justify-content:center;font-size:10.5px;font-weight:800;padding:0 3px}
+table.ex td:nth-child(2){width:190px;font-weight:700}
+table.ex tr:nth-child(even) td{background:#fafaf8}
+
+/* rules */
+.rules{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.rule{border:1.5px solid #ddd;border-radius:8px;background:#fbfbf9;padding:12px 14px}
+.rule .rt{font-size:12px;font-weight:800;margin-bottom:4px}
+.rule .rd{font-size:11.5px;color:#666;line-height:1.55}
+@media(max-width:760px){.grid2,.grid3,.rules{grid-template-columns:1fr}}
+@media print{body{background:#fff;padding:0}.wf{break-inside:avoid}h2.sec{break-after:avoid}}
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="doc-head">
+  <h1>Convert Test Cases — the main screen, in detail</h1>
+  <p>This is the heart of the tool: where a tester turns manual test cases into an automatic test. Designed so a <b>non-technical person</b> can use it without training — no jargon, one clear action per step, safe by default. Three states are shown: before, during, and after conversion. Every numbered dot is explained in the tables below.</p>
+</div>
+<div class="doc-body">
+
+<!-- ═══════════════════ STATE A ═══════════════════ -->
+<h2 class="sec">State A — the screen as it first opens</h2>
+<p class="secsub">The user has exactly one job here: give us their test steps. Everything else is optional or already filled in.</p>
+
+<div class="wf">
+  <span class="statechip">State A · Start</span>
+
+  <div class="tag" style="display:inline-block"><span class="b tl">1</span>
+    <div class="wf-title">Convert Test Cases</div>
+    <div class="wf-sub">Turn your manual test steps into an automatic test. No coding needed.</div>
+  </div>
+
+  <div class="tag"><span class="b tl">2</span>
+  <div class="rail">
+    <div class="st on"><span class="num">1</span> Add your test steps</div>
+    <div class="st"><span class="num">2</span> Check the settings</div>
+    <div class="st"><span class="num">3</span> Convert &amp; review</div>
+  </div>
+  </div>
+
+  <div class="grid2">
+    <div><!-- LEFT: main flow -->
+
+      <div class="card tag"><span class="b tl">3</span>
+        <div class="card-t">How do you want to add your test steps?</div>
+        <div class="grid3">
+          <div class="pick on tag"><span class="b tr">4</span><i class="ti ti-file-spreadsheet"></i><div class="pt">Upload a file</div><div class="ps">The Excel test-case files you already write (.xlsx)</div></div>
+          <div class="pick"><i class="ti ti-clipboard-text"></i><div class="pt">Paste your steps</div><div class="ps">Copy from any document and paste here</div></div>
+          <div class="pick"><i class="ti ti-message-2"></i><div class="pt">Just describe it</div><div class="ps">Type what to test in your own words</div></div>
+        </div>
+
+        <div class="drop tag"><span class="b tl">5</span>
+          <i class="ti ti-cloud-upload"></i>
+          <div class="dt">Drag your file here, or <span class="link">choose from computer</span></div>
+          <div class="ds">Works with Excel files (.xlsx) &nbsp;·&nbsp; one file can hold many test cases, even for different screens</div>
+          <div class="ds" style="margin-top:6px">New here? <span class="link tag" style="position:relative"><span class="b tr" style="top:-12px;right:-24px">6</span>Download an example file</span> to see what a test case file looks like</div>
+        </div>
+
+        <div class="filechip tag"><span class="b tl">7</span>
+          <i class="ti ti-file-check"></i>
+          <div><div class="fn">STRAT-27678 Edit Color.xlsx</div><div class="fm">3 test cases found · ticket STRAT-27678 detected automatically</div></div>
+          <span class="rm">Remove</span>
+        </div>
+      </div>
+
+      <div class="card tag"><span class="b tl">8</span>
+        <div class="card-t">Check the settings <small style="font-weight:500;color:#999">— we filled these in for you</small></div>
+
+        <label class="f">Test name</label>
+        <div class="tag"><span class="b tr">9</span><input class="inp" value="Edit Color — STRAT-27678"></div>
+        <div class="hint">So you can find it later. We took this from your file — change it if you like.</div>
+
+        <label class="f">Ticket number <small>(optional)</small></label>
+        <div class="tag"><span class="b tr">10</span><input class="inp" value="STRAT-27678"></div>
+        <div class="hint">Found in your file name. Links this test to the ticket so reports show what was tested.</div>
+
+        <label class="f">Where should the test run?</label>
+        <div class="sel tag"><span class="b tr">11</span><span><span class="dot"></span>Test server (safe — not the real store data)</span><i class="ti ti-chevron-down" style="color:#aaa"></i></div>
+        <div class="hint">Tests always run on a practice copy of the system. The live store is never touched.</div>
+
+        <label class="f">How should it run?</label>
+        <div class="toggle tag"><span class="b tr">12</span>
+          <div class="opt on">Practice run — look, but change nothing</div>
+          <div class="opt">Full run — create and edit test data</div>
+        </div>
+        <div class="hint">Practice run is selected for you. It clicks through the screens without saving anything, so it's always safe to try.</div>
+      </div>
+
+      <div class="tag"><span class="b tl">13</span>
+        <button class="bigbtn">Convert my test cases &nbsp;→</button>
+      </div>
+      <div class="reassure tag" style="position:relative"><span class="b tr" style="top:-6px;right:210px">14</span>Takes about a minute. Nothing will run until you press Run yourself.</div>
+
+    </div>
+    <div><!-- RIGHT: help panel -->
+      <div class="help tag"><span class="b tl">15</span>
+        <div class="ht">What happens when you press Convert?</div>
+        <div class="hstep"><i class="ti ti-eyeglass"></i><div><b>We read your steps</b> — exactly as you wrote them, row by row.</div></div>
+        <div class="hstep"><i class="ti ti-map-pin"></i><div><b>We find the right screens</b> — the tool knows every screen in Stratus BackOffice.</div></div>
+        <div class="hstep"><i class="ti ti-settings-automation"></i><div><b>We build the automatic test</b> — clicks, typing and checks, done by the computer.</div></div>
+        <div class="hstep"><i class="ti ti-help-circle"></i><div><b>We ask if we're unsure</b> — anything unclear becomes a simple question for you. Nothing is skipped silently.</div></div>
+        <div class="foot">You can always change things afterwards — nothing is final until you press Run.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2 class="sec" style="margin-top:18px;border-bottom:1px solid #ddd;font-size:12px">State A — what every element is, and why</h2>
+<table class="ex">
+  <tr><th></th><th>Element</th><th>What it is &amp; why it's easy</th></tr>
+  <tr><td><span class="n">1</span></td><td>Title + one-line promise</td><td>Says what the page does in plain words — "turn manual steps into an automatic test, no coding". Sets the expectation immediately; no product jargon like "YAML" or "conversion pipeline".</td></tr>
+  <tr><td><span class="n">2</span></td><td>3-step progress rail</td><td>Shows the whole journey up front: <b>Add steps → Check settings → Convert &amp; review</b>. Behavior: ticks are automatic (step 1 ✓ when a file is added; step 2 ✓ right after, since every setting is pre-filled; step 3 ✓ when conversion finishes). <b>Completed steps are clickable to go back</b> — with everything preserved — but forward steps are never clickable (no empty dead-ends). If the user goes back and changes the file or a setting after converting, step 3 un-ticks and the button becomes "Convert again →", so a stale result can never be run.</td></tr>
+  <tr><td><span class="n">3</span></td><td>"How do you want to add your test steps?"</td><td>A question, not a menu. Three big cards instead of hidden tabs — the user picks the way that matches how they already work.</td></tr>
+  <tr><td><span class="n">4</span></td><td>Input method cards (Upload / Paste / Describe)</td><td><b>Upload a file</b> — the Excel (.xlsx) test-case files testers already write (Google Sheets users download as Excel first). <b>Paste your steps</b> — for steps living in emails or Word; pasted text goes through the same plain-English understanding as "describe it". <b>Just describe it</b> — type what to test in your own words. The selected card gets a dark border so the choice is visible.</td></tr>
+  <tr><td><span class="n">5</span></td><td>Drop zone</td><td>Big target, two ways to use it (drag, or click "choose from computer"), and it states the file type in plain terms. One file at a time — but a single file can carry a whole ticket's test cases across many screens, and the tool splits them correctly.</td></tr>
+  <tr><td><span class="n">6</span></td><td>"Download an example file"</td><td>The single best helper for a first-time user: a ready-made sample showing what a test case file looks like. Removes the "am I doing this right?" fear.</td></tr>
+  <tr><td><span class="n">7</span></td><td>Added-file row</td><td>Instant feedback after upload: file name, <b>how many test cases we found inside</b>, and the ticket number we auto-detected. A quiet "Remove" undo — mistakes are cheap.</td></tr>
+  <tr><td><span class="n">8</span></td><td>"Check the settings — we filled these in for you"</td><td>The framing matters: the user <b>checks</b> settings, they don't <b>fill in</b> settings. Everything below is pre-filled with a sensible answer; the user can simply scroll past.</td></tr>
+  <tr><td><span class="n">9</span></td><td>Test name</td><td>Auto-filled from the file name. Only exists so the test is findable later in the library. Editable, never required.</td></tr>
+  <tr><td><span class="n">10</span></td><td>Ticket number (optional)</td><td>Auto-detected from the file name (e.g. STRAT-27678). Connects the test to the ticket so release reports can prove what was tested. Clearly marked optional.</td></tr>
+  <tr><td><span class="n">11</span></td><td>"Where should the test run?"</td><td>A dropdown of servers with <b>friendly names and a green health dot</b> — "Test server (safe — not the real store data)". The helper line kills the #1 fear of non-technical users: <i>am I going to break the real system?</i> Answer: never.</td></tr>
+  <tr><td><span class="n">12</span></td><td>Practice run / Full run toggle</td><td>Instead of technical "read-only vs write mode": <b>"Practice run — look, but change nothing"</b> (default) vs <b>"Full run — create and edit test data"</b>. Safe choice pre-selected; the words describe consequences, not modes.</td></tr>
+  <tr><td><span class="n">13</span></td><td>The one big button</td><td>"Convert my test cases →" — the only dark, full-width button on the page. There is never a question about what to press next.</td></tr>
+  <tr><td><span class="n">14</span></td><td>Reassurance line</td><td>"Takes about a minute. Nothing will run until you press Run yourself." Tells them the cost (a minute) and removes the fear that pressing the button triggers something big.</td></tr>
+  <tr><td><span class="n">15</span></td><td>"What happens when you press Convert?"</td><td>A side panel that explains the magic in four plain sentences — read your steps, find the screens, build the test, ask when unsure. Builds trust before the first click; experienced users just ignore it.</td></tr>
+</table>
+
+<!-- ═══════════════════ STATE B ═══════════════════ -->
+<h2 class="sec">State B — while it converts (~1 minute)</h2>
+<p class="secsub">Friendly narration instead of a spinner. The user sees the tool "working like a person would".</p>
+
+<div class="wf">
+  <span class="statechip">State B · Converting</span>
+  <div class="prog">
+    <div class="tag"><span class="b tl">16</span>
+    <div class="prow done"><span class="ic"><i class="ti ti-check"></i></span><b>Read your file</b>&nbsp;— found 3 test cases with 22 steps</div>
+    <div class="prow done"><span class="ic"><i class="ti ti-check"></i></span><b>Understood your steps</b>&nbsp;— written in plain English, got it</div>
+    <div class="prow doing"><span class="ic"><i class="ti ti-loader-2"></i></span><b>Matching steps to Stratus screens…</b>&nbsp;(step 14 of 22)</div>
+    <div class="prow todo"><span class="ic">4</span>Building your automatic test</div>
+    </div>
+    <div class="pbar tag"><span class="b tl" style="top:-11px">17</span><div></div></div>
+    <div class="ptext">About 20 seconds left · you can keep working, we'll be here</div>
+    <div style="text-align:center;margin-top:14px"><span class="techtoggle tag" style="display:inline;position:relative"><span class="b tr" style="top:-13px;right:-26px">18</span>Cancel</span></div>
+  </div>
+</div>
+
+<h2 class="sec" style="margin-top:18px;border-bottom:1px solid #ddd;font-size:12px">State B — explanation</h2>
+<table class="ex">
+  <tr><th></th><th>Element</th><th>What it is &amp; why it's easy</th></tr>
+  <tr><td><span class="n">16</span></td><td>Progress told as a story</td><td>Four human sentences with ticks appearing one by one — "Read your file — found 3 test cases with 22 steps". Each line also quietly confirms the tool understood the input correctly (counts match what the tester expects).</td></tr>
+  <tr><td><span class="n">17</span></td><td>Progress bar + time left</td><td>A simple bar plus "About 20 seconds left". The line "you can keep working, we'll be here" tells them waiting is optional.</td></tr>
+  <tr><td><span class="n">18</span></td><td>Cancel</td><td>Small and quiet, but always available. Cancelling loses nothing — their file is still attached in State A.</td></tr>
+</table>
+
+<!-- ═══════════════════ STATE C ═══════════════════ -->
+<h2 class="sec">State C — the result, and fixing the unclear parts</h2>
+<p class="secsub">The moment that decides whether a non-technical person can use this tool: unclear steps become <b>questions in plain English</b>, never error codes.</p>
+
+<div class="wf">
+  <span class="statechip">State C · Review</span>
+
+  <div class="verdict tag"><span class="b tl">19</span>
+    <i class="ti ti-circle-check" style="font-size:30px"></i>
+    <div>
+      <div class="big">Done! We understood 19 of your 22 steps.</div>
+      <div class="sub">3 steps need a quick answer from you — see below. Everything is saved.</div>
+    </div>
+    <div style="margin-left:auto;display:flex;gap:7px">
+      <span class="chip ok"><i class="ti ti-check"></i> 19 ready</span>
+      <span class="chip warn"><i class="ti ti-help-circle"></i> 3 need you</span>
+    </div>
+  </div>
+
+  <div style="margin:16px 0 8px;font-size:12.5px;font-weight:800" class="tag"><span class="b tl" style="left:-26px">20</span>Help us with these 3 steps</div>
+
+  <div class="qcard">
+    <div class="orig">Your step said: "Select Brand = DISNEY [detail form]"</div>
+    <div class="q"><i class="ti ti-help-circle"></i> Which screen is the "Brand" box on? We couldn't find it by ourselves.</div>
+    <div class="row tag"><span class="b tr">21</span>
+      <input class="inp ph" value="Type your answer, e.g. “It's the Brand dropdown on the product detail page”">
+      <button class="qbtn">That fixes it</button>
+    </div>
+    <button class="qskip tag" style="position:relative"><span class="b tr" style="top:-10px;right:-26px">22</span>Skip for now — run the test without this step</button>
+  </div>
+
+  <div class="qcard" style="opacity:.55">
+    <div class="orig">Your step said: "Fill search = BLUE"</div>
+    <div class="q"><i class="ti ti-help-circle"></i> We found two search boxes on the Color screen — which one did you mean?</div>
+    <div class="row"><input class="inp ph" value="e.g. “The one at the top, next to the Search button”"><button class="qbtn">That fixes it</button></div>
+  </div>
+
+  <div class="acc tag"><span class="b tl">23</span><span><i class="ti ti-chevron-down"></i>&nbsp; See the 19 steps we understood</span><span class="chip ok">all good</span></div>
+  <div style="background:#fff;border:1.5px solid #eee;border-radius:8px;margin:-6px 0 10px">
+    <div class="steprow tag"><span class="b tl" style="left:-10px">24</span><i class="ti ti-check"></i> Step 1 — Open the <b>Products</b> screen</div>
+    <div class="steprow"><i class="ti ti-check"></i> Step 2 — Click the <b>New</b> button</div>
+    <div class="steprow"><i class="ti ti-check"></i> Step 3 — Type <b>“AUTOTEST-001”</b> into the <b>Style</b> box</div>
+    <div class="steprow" style="border-bottom:none;color:#aaa">… 16 more steps</div>
+  </div>
+
+  <span class="techtoggle tag" style="position:relative"><span class="b tr" style="top:-12px;right:-26px">25</span>Show the technical file (for developers)</span>
+
+  <div class="actions tag"><span class="b tl">26</span>
+    <div class="abtn primary"><i class="ti ti-player-play"></i> Run the test now</div>
+    <div class="abtn">Save to my library</div>
+    <div class="abtn ghost">Start over</div>
+  </div>
+  <div class="autosave tag" style="position:relative"><span class="b tr" style="top:-8px;right:300px">27</span><i class="ti ti-device-floppy"></i> Saved automatically — you can close this page and come back anytime.</div>
+</div>
+
+<h2 class="sec" style="margin-top:18px;border-bottom:1px solid #ddd;font-size:12px">State C — explanation</h2>
+<table class="ex">
+  <tr><th></th><th>Element</th><th>What it is &amp; why it's easy</th></tr>
+  <tr><td><span class="n">19</span></td><td>Result in one sentence</td><td>"We understood 19 of your 22 steps." Not a percentage, not a "confidence score" — a sentence anyone understands, with two chips: green = ready, amber = needs you. It celebrates what worked before pointing at what didn't.</td></tr>
+  <tr><td><span class="n">20</span></td><td>"Help us with these 3 steps"</td><td>The unclear steps are framed as the tool asking for help — not the user having made errors. This flips the emotional experience from "I failed" to "it needs me".</td></tr>
+  <tr><td><span class="n">21</span></td><td>Question card + plain answer box</td><td>Each card shows: <b>the user's original sentence</b> (so they recognise it), <b>one specific question</b> ("Which screen is the Brand box on?"), and a free-text box where they answer <b>in their own words</b> — the AI translates the answer into the technical fix. Example text in the box shows what a good answer looks like.</td></tr>
+  <tr><td><span class="n">22</span></td><td>"Skip for now"</td><td>Every question can be skipped — the test runs without that step and the report clearly lists it as skipped. Nobody is ever blocked by one confusing step.</td></tr>
+  <tr><td><span class="n">23</span></td><td>"See the 19 steps we understood" (folded)</td><td>Success is folded away by default — the user only reviews it if they want to. One click opens the full list.</td></tr>
+  <tr><td><span class="n">24</span></td><td>Steps written back in plain English</td><td>Each understood step is shown as a sentence — "Click the New button", "Type 'AUTOTEST-001' into the Style box" — so the tester can proofread the automation <b>without reading any code</b>. This is the trust-builder.</td></tr>
+  <tr><td><span class="n">25</span></td><td>"Show the technical file (for developers)"</td><td>The YAML exists — but hidden behind one small link. Technical users get everything; non-technical users never see a line of code.</td></tr>
+  <tr><td><span class="n">26</span></td><td>Three finish actions</td><td><b>Run the test now</b> (the dark primary — the natural next step), <b>Save to my library</b> (keep it for a release later), <b>Start over</b> (quiet, grey, no harm). One obvious choice, two safe alternatives.</td></tr>
+  <tr><td><span class="n">27</span></td><td>Autosave note</td><td>"Saved automatically — close this page and come back anytime." Removes the last anxiety: nothing can be lost by walking away.</td></tr>
+</table>
+
+<!-- ═══════════════════ CODE MAPPING ═══════════════════ -->
+<h2 class="sec">Grounded in the real tool — element-to-code map</h2>
+<p class="secsub">This design is not imaginary: nearly every element is served by code that already exists in <b>stratus-qa-tool</b> today. The table shows exactly what backs each part, and honestly marks the few pieces that are new UI work.</p>
+<table class="ex">
+  <tr><th style="width:230px">Wireframe element</th><th>Backed by (in stratus-qa-tool)</th><th style="width:110px">Status</th></tr>
+  <tr><td>Upload a file → convert</td><td><span style="font-family:monospace">POST /api/import-testcases</span> (web_ui/app.py) → <span style="font-family:monospace">framework/testcase_importer.py</span>. Auto-detects 3 real Excel layouts; unclear steps become explicit TODO steps — never silently dropped.</td><td>✅ Exists</td></tr>
+  <tr><td>"We understood 19 of 22 steps" (№19)</td><td>The import response already returns <span style="font-family:monospace">n_steps_translated, n_steps_total, pct_translated</span> — the sentence is these two numbers, humanised.</td><td>✅ Exists</td></tr>
+  <tr><td>One file, many test cases / screens</td><td>Import returns a <span style="font-family:monospace">per_screen</span> breakdown; <span style="font-family:monospace">/api/import-testcases/zip</span> can emit one file per screen.</td><td>✅ Exists</td></tr>
+  <tr><td>Download an example file (№6)</td><td><span style="font-family:monospace">GET /api/template/xlsx</span> — the official test-case template, auto-generated if missing (template_builder.py). CSV form also available for Google Sheets users.</td><td>✅ Exists</td></tr>
+  <tr><td>Just describe it (№4, card 3)</td><td><span style="font-family:monospace">POST /api/nl-to-yaml</span> — plain-English description → runnable test, catalog-driven with real field/button ids.</td><td>✅ Exists</td></tr>
+  <tr><td>Paste your steps (№4, card 2)</td><td>Pasted prose goes through the same NL pipeline (<span style="font-family:monospace">/api/nl-to-yaml</span> / intent parser).</td><td>✅ Exists</td></tr>
+  <tr><td>Answer-in-your-own-words fix box (№21)</td><td><span style="font-family:monospace">POST /api/modify-testcases</span> + <span style="font-family:monospace">framework/prompt_engine.py</span> — built exactly for tester phrasing (its own code comments quote: "pls add screenshots wherever it clicks thx").</td><td>✅ Exists</td></tr>
+  <tr><td>Practice run / Full run toggle (№12)</td><td><span style="font-family:monospace">safe_mode</span> / <span style="font-family:monospace">read_only</span> flags already accepted by the run + generator APIs.</td><td>✅ Exists</td></tr>
+  <tr><td>Server picker + health dot (№11)</td><td><span style="font-family:monospace">GET /api/profiles</span> (saved connection profiles) + <span style="font-family:monospace">POST /api/test-connection</span> (the health check).</td><td>✅ Exists</td></tr>
+  <tr><td>Save to my library (№26)</td><td><span style="font-family:monospace">POST /api/scenarios</span> — the scenario store (id, title, steps, variables, tags, author).</td><td>✅ Exists</td></tr>
+  <tr><td>Run the test now (№26)</td><td><span style="font-family:monospace">POST /api/run</span> + live progress via <span style="font-family:monospace">/api/events</span>.</td><td>✅ Exists</td></tr>
+  <tr><td>Ticket auto-detect from file name (№7, №10)</td><td>Simple file-name pattern match (STRAT-#####) done in the browser before upload.</td><td>🔸 Micro — new</td></tr>
+  <tr><td>Per-step plain-English questions (№20–21)</td><td>TODO steps already carry the original prose + reason; the question wording is a small presentation layer over that data.</td><td>🔸 New UI layer</td></tr>
+  <tr><td>Story-style progress narration (№16)</td><td>Progress events exist (<span style="font-family:monospace">/api/events</span>); the friendly sentences are frontend presentation.</td><td>🔸 New UI layer</td></tr>
+</table>
+
+<!-- ═══════════════════ RULES ═══════════════════ -->
+<h2 class="sec">The 6 rules that keep this screen non-technical</h2>
+<p class="secsub">Worth keeping next to the build — every future change to this screen should pass these.</p>
+<div class="rules">
+  <div class="rule"><div class="rt">1 · Plain words, everywhere</div><div class="rd">No "YAML", "parse", "selector", "confidence score" on the main path. It's "your test steps", "the automatic test", "steps that need you". Technical vocabulary lives only behind the developers' link (№25).</div></div>
+  <div class="rule"><div class="rt">2 · One big button per stage</div><div class="rd">At any moment there is exactly one dark button — Convert (A), then Run (C). Users never choose between equal-looking options.</div></div>
+  <div class="rule"><div class="rt">3 · Nothing required except the file</div><div class="rd">Every field is pre-filled or optional. The shortest possible journey is: drop file → Convert → answer 0–3 questions → Run. Two clicks plus a drag.</div></div>
+  <div class="rule"><div class="rt">4 · Safe by default</div><div class="rd">Practice run pre-selected, tests only run on the test server, and nothing executes until the user presses Run. The screen says these things out loud, because feeling safe is a feature.</div></div>
+  <div class="rule"><div class="rt">5 · Problems are questions, not errors</div><div class="rd">The tool never says "parse failure at line 14". It quotes the user's own sentence and asks one specific question with a free-text answer box. Skipping is always allowed.</div></div>
+  <div class="rule"><div class="rt">6 · Nothing can be lost</div><div class="rd">Autosave everywhere, Remove/Cancel/Start-over are always visible but quiet, and coming back later is explicitly promised on-screen.</div></div>
+</div>
+
+</div><!-- /doc-body -->
+</div>
+</body>
+</html>
