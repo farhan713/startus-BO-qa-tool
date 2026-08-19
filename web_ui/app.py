@@ -251,8 +251,25 @@ def convert_screen():
 
 # ---------------------------------------------------------- run
 
+def _run_guard(fn):
+    """Auth guard for /api/run.
+
+    Normally this is `login_required`. Setting QA_DEMO_OPEN_RUN=1 removes it so
+    the Convert screen can be demonstrated on its own, without first creating an
+    account. It is OFF unless explicitly switched on, and the switch lives in
+    .env (gitignored) so it never ships. Turn it off again by deleting the line.
+
+    Do not enable this on a shared or internet-reachable host: the server binds
+    0.0.0.0 with no TLS, and /api/run drives a real browser against a real
+    Stratus install.
+    """
+    if os.environ.get("QA_DEMO_OPEN_RUN", "").strip() in ("1", "true", "yes", "on"):
+        return fn
+    return _auth.login_required(fn)
+
+
 @app.route("/api/run", methods=["POST"])
-@_auth.login_required
+@_run_guard
 def api_run():
     global CURRENT
     with LOCK:
@@ -578,9 +595,15 @@ def api_history():
 
 
 def _append_history(entry: dict) -> None:
-    # Stamp owner so per-user filtering works
+    # Stamp owner so per-user filtering works.
+    # This runs on the background run thread, where there is no Flask request
+    # context, so current_user() raises. Without the guard the worker dies here
+    # and no run is ever written to history.
     if "owner" not in entry:
-        entry["owner"] = _auth.current_user() or ""
+        try:
+            entry["owner"] = _auth.current_user() or ""
+        except Exception:
+            entry["owner"] = ""
     h = _read_json(HISTORY_FILE, [])
     h.append(entry)
     _write_json(HISTORY_FILE, h[-200:])  # keep last 200
@@ -902,6 +925,369 @@ def api_modify_testcases():
         "llm_error": res.llm_error,
         "catalog_known": entry is not None,
     })
+
+
+from framework import step_kinds as _step_kinds
+from framework import screen_resolver as _screen_resolver
+from framework import line_kinds as _line_kinds
+
+
+def _catalog_screens() -> list:
+    """Catalog as a flat list, loaded once per process."""
+    global _CAT_LIST
+    try:
+        return _CAT_LIST
+    except NameError:
+        pass
+    from framework.catalog_builder import load_catalog
+    d = load_catalog() or {}
+    scr = d.get("screens") if isinstance(d, dict) else d
+    if isinstance(scr, dict):
+        scr = list(scr.values())
+    _CAT_LIST = scr or []
+    return _CAT_LIST
+
+
+def _classify_lines(lines: list, steps: list) -> list:
+    """One kind per line, plus grouping of consecutive same-kind questions.
+
+    Three identical questions stacked is the alert-fatigue failure with better
+    wording, so consecutive bullet questions collapse into one card that can be
+    answered in a single click.
+    """
+    # Count only steps that survive into the test. A line whose entire output was
+    # notes has produced nothing runnable, and calling it an "action" line left
+    # the tester's sentence sitting there with nothing underneath and no
+    # explanation — silence that reads as a glitch rather than as "all fine".
+    # Only a RESOLVED step counts. A line whose sole output is an unresolved
+    # placeholder had been treated as an action line, so it rendered as a step
+    # row reading "? <your own sentence>" — the tool echoing the question back
+    # instead of asking it. Such a line is a question, and belongs in a card
+    # that says what it needs.
+    used = {s.get("src") for s in steps
+            if s.get("src", -1) >= 0 and s.get("action") != "todo"}
+    out = []
+    for n, t in enumerate(lines):
+        kind, qtype = _line_kinds.classify_line(t, n in used)
+        out.append({"i": n, "text": t, "kind": kind, "qtype": qtype,
+                    "group": [], "answer": None})
+
+    # Fold runs of the same bullet question into the first of the run.
+    i = 0
+    while i < len(out):
+        if out[i]["qtype"] == _line_kinds.Q_BULLET:
+            j = i + 1
+            while j < len(out) and out[j]["qtype"] == _line_kinds.Q_BULLET:
+                out[i]["group"].append(out[j]["i"])
+                out[j]["kind"] = "grouped"
+                out[j]["qtype"] = None
+                j += 1
+            i = j
+        else:
+            i += 1
+    return out
+
+
+def _structure(res, screen):
+    """Reshape an ImportResult into the editor's JSON.
+
+    Every step carries `ready`, which is simply "the importer produced a real
+    action, not a todo". That single flag is what the UI colours on, and what
+    the progress count is built from, so a tester can see at a glance how much
+    of the sheet still needs a human."""
+    scenarios, n_ready, n_steps = [], 0, 0
+    for i, tc in enumerate(res.cases or []):
+        # Legacy sheets carry section-header rows ("Backoffice", "Security")
+        # that parse into a named case with no steps. They are labels, not
+        # tests, and an empty card in the editor is pure noise.
+        if not (tc.steps or []):
+            continue
+        name = (tc.name or "").strip() or f"Scenario {i + 1}"
+        # Legacy sheets encode the section in the name as "Group>>Case".
+        group, _, short = name.partition(">>")
+        if not short:
+            group, short = "", name
+        steps = []
+        for j, st in enumerate(tc.steps or []):
+            action = (st.get("action") or "todo").lower()
+            ready = action != "todo"
+            n_ready += 1 if ready else 0
+            n_steps += 1
+            target = str(st.get("target") or "")
+            steps.append({
+                "id":     f"s{i}_{j}",
+                "action": action,
+                "target": target,
+                "value":  str(st.get("value") or ""),
+                "ready":  ready,
+                # Which prose line produced this step, and whether the tester
+                # wrote it or the tool added it. The editor groups by the first
+                # and labels the second.
+                "src":    st.get("_src", -1),
+                "origin": st.get("_origin", "sheet"),
+                # Only untranslated rows carry a kind — it explains WHY a row is
+                # not automated, which is the difference between "you have 94
+                # steps to write" and "you have 37, the rest were never steps".
+                "kind":   (None if ready else _step_kinds.classify(target)),
+            })
+        # The sheet names its own destination ("Path: A > B > C"), so resolve it
+        # rather than forcing every scenario onto whatever the tester typed.
+        sc_screen, conf = _screen_resolver.resolve(steps, _catalog_screens(), screen)
+        scenarios.append({
+            "id":         f"sc{i}",
+            "name":       short.strip(),
+            "group":      group.strip(),
+            "screen":     sc_screen,
+            "screen_conf": conf,
+            "expected":   (tc.expected or "").strip(),
+            # The raw spreadsheet prose for this scenario. The editor shows it
+            # beside the converted steps so a tester can see what their sheet
+            # said and what the tool made of it, without opening Excel.
+            "original":   (getattr(tc, "notes", "") or "").strip(),
+            # The tester's own sentences, in order. A line with no steps is the
+            # failure the old two-column layout could not show.
+            "lines":      _classify_lines(getattr(tc, "lines", []) or [], steps),
+            "steps":      steps,
+        })
+    kinds = [t["kind"] for s in scenarios for t in s["steps"] if t.get("kind")]
+    n_lines = sum(len(s["lines"]) for s in scenarios)
+    n_covered = 0
+    for s in scenarios:
+        used = {t["src"] for t in s["steps"] if t.get("src", -1) >= 0}
+        n_covered += sum(1 for ln in s["lines"] if ln["i"] in used)
+    return {
+        "scenarios": scenarios,
+        "summary": {
+            "scenarios": len(scenarios),
+            "steps":     n_steps,
+            "ready":     n_ready,
+            "needs":     n_steps - n_ready,
+            "pct":       round(100 * n_ready / n_steps) if n_steps else 0,
+            "layout":    res.layout,
+            "kinds":     _step_kinds.summarise(kinds),
+            "lines":     n_lines,
+            "lines_covered": n_covered,
+            "questions": sum(1 for s in scenarios for ln in s["lines"]
+                             if ln["kind"] == "question"),
+            "notes_kept": sum(1 for s in scenarios for ln in s["lines"]
+                              if ln["kind"] in ("note", "heading", "setup")),
+        },
+    }
+
+
+
+def _asset_v(filename: str) -> str:
+    """Cache-buster from the file's mtime.
+
+    Static assets are served with far-future caching, so an edited convert.js
+    kept loading from cache and the page ran yesterday's code — which looks
+    exactly like a bug in today's. Stamping the mtime makes a changed file a
+    changed URL.
+    """
+    try:
+        return str(int(os.path.getmtime(
+            os.path.join(app.static_folder, filename))))
+    except OSError:
+        return "0"
+
+
+@app.context_processor
+def _inject_asset_v():
+    return {"asset_v": _asset_v}
+
+
+@app.route("/api/yaml-to-structured", methods=["POST"])
+def api_yaml_to_structured():
+    """Turn a YAML test plan into the editor's scenario/step JSON.
+
+    The Convert screen also accepts pasted or described tests, which never pass
+    through the Excel importer. Going through YAML keeps all three input methods
+    on one code path into the same editor.
+
+    POST JSON: {"yaml": "...", "screen": "..."}
+    """
+    import yaml as _yaml
+    body = request.get_json(silent=True) or {}
+    text = body.get("yaml") or ""
+    screen = (body.get("screen") or "yourscreen").strip()
+    try:
+        doc = _yaml.safe_load(text) or {}
+    except Exception as e:
+        return jsonify({"error": f"could not read the test file: {e}"}), 400
+
+    class _TC:
+        __slots__ = ("name", "steps", "expected", "notes")
+
+    cases = []
+    for t in (doc.get("tests") or []):
+        c = _TC()
+        c.name = str(t.get("name") or "")
+        c.steps = list(t.get("steps") or [])
+        c.expected = ""
+        c.notes = ""
+        cases.append(c)
+
+    class _Res:
+        pass
+    res = _Res()
+    res.cases = cases
+    res.layout = "yaml"
+    return jsonify(_structure(res, screen))
+
+
+@app.route("/api/classify-steps", methods=["POST"])
+def api_classify_steps():
+    """Label a list of untranslated step texts by kind.
+
+    The Convert screen parses YAML client-side and cannot run the Python
+    classifier, so it asks here. Without this it raises a question for every
+    todo — including database setup, permission lists and business rules —
+    which is what turned 39 real questions into 212.
+
+    POST JSON: {"texts": ["...", ...]}
+    -> {"kinds": ["step"|"setup_db"|"setup_sec"|"rule", ...], "counts": {...}}
+    """
+    body = request.get_json(silent=True) or {}
+    texts = body.get("texts") or []
+    if not isinstance(texts, list):
+        return jsonify({"error": "texts must be a list"}), 400
+    kinds = [_step_kinds.classify(str(t or "")) for t in texts[:5000]]
+    return jsonify({"kinds": kinds, "counts": _step_kinds.summarise(kinds)})
+
+
+@app.route("/api/sheets", methods=["POST"])
+def api_sheets():
+    """List the workbook's sheets so the tester picks one.
+
+    Reading whichever sheet Excel left active silently imported the wrong tab.
+    POST multipart: file = <xlsx>
+    """
+    from framework.testcase_importer import list_sheets
+    if "file" not in request.files:
+        return jsonify({"error": "no file uploaded"}), 400
+    try:
+        return jsonify({"sheets": list_sheets(request.files["file"].read())})
+    except Exception as e:
+        return jsonify({"error": f"could not read that file: {e}"}), 500
+
+
+@app.route("/api/import-structured", methods=["POST"])
+def api_import_structured():
+    """Same import as /api/import-testcases, but returns scenarios and steps as
+    editable JSON instead of a YAML blob.
+
+    POST multipart form:  file = <xlsx>, screen = <screenname>
+    """
+    from framework.testcase_importer import import_xlsx
+    if "file" not in request.files:
+        return jsonify({"error": "no file uploaded"}), 400
+    screen = (request.form.get("screen") or "yourscreen").strip()
+    sheet  = (request.form.get("sheet") or "").strip() or None
+    use_ai = (request.form.get("use_ai") or "").strip() in ("1", "true", "yes", "on")
+    try:
+        res = import_xlsx(request.files["file"].read(), screen=screen, sheet=sheet)
+    except Exception as e:
+        return jsonify({"error": f"import failed: {e}"}), 500
+
+    out = _structure(res, screen)
+    out["ai"] = {"available": _ai_available(), "used": False, "filled": 0}
+    if use_ai and _ai_available():
+        out = _ai_fill(out, screen)
+    return jsonify(out)
+
+
+def _ai_available() -> bool:
+    from framework import ai_steps
+    return ai_steps.available()
+
+
+def _ai_fill(out: dict, screen: str) -> dict:
+    """Second tier: send only the steps the rules could not translate.
+
+    The rules already did the cheap, certain work; this pays for the rest.
+    Anything the model declines to convert stays a todo, so the tester is never
+    handed a confident wrong click in place of an honest blank."""
+    from framework import ai_steps
+    # Group by resolved screen: a batch is only as good as the field list it is
+    # grounded in, so scenarios on different screens must not share a prompt.
+    groups: dict = {}
+    for sc in out["scenarios"]:
+        for st in sc["steps"]:
+            # Setup/permission/rule rows are not UI actions — spending tokens
+            # asking the model to convert them invites exactly the fabricated
+            # clicks the classifier exists to prevent.
+            if st["action"] == "todo" and st["target"].strip() and \
+               (st.get("kind") or "step") == "step":
+                groups.setdefault(sc.get("screen") or screen, []).append(st)
+    if not groups:
+        return out
+    total, filled_n, errors = 0, 0, []
+    for scr_name, items in groups.items():
+        total += len(items)
+        try:
+            filled = ai_steps.translate_todos(
+                [s["target"] for s in items], scr_name, _catalog_entry(scr_name),
+                errors=errors)
+        except Exception as e:
+            # Record it — a silently swallowed failure here looks identical to
+            # "the model declined everything", which hid a real bug once.
+            errors.append(f"{scr_name}: {str(e)[:120]}")
+            continue
+        for i, st in enumerate(items):
+            got = filled.get(i)
+            if not got:
+                continue
+            st["action"] = got["action"]
+            st["target"] = got["target"] or st["target"]
+            st["value"]  = got["value"]
+            st["ready"]  = True
+            st["by_ai"]  = True
+            filled_n += 1
+    for sc in out["scenarios"]:
+        for t in sc["steps"]:
+            t["kind"] = None if t["action"] != "todo" else _step_kinds.classify(t["target"])
+    steps = sum(len(s["steps"]) for s in out["scenarios"])
+    ready = sum(1 for s in out["scenarios"] for t in s["steps"] if t["action"] != "todo")
+    kinds = [t["kind"] for s in out["scenarios"] for t in s["steps"] if t.get("kind")]
+    out["summary"].update({"steps": steps, "ready": ready, "needs": steps - ready,
+                           "pct": round(100 * ready / steps) if steps else 0,
+                           "kinds": _step_kinds.summarise(kinds)})
+    out["ai"] = {"available": True, "used": True, "filled": filled_n,
+                 "considered": total, "screens": len(groups)}
+    if errors:
+        out["ai"]["errors"] = errors[:5]
+    return out
+
+
+@app.route("/api/structured-to-yaml", methods=["POST"])
+def api_structured_to_yaml():
+    """Turn the editor's edited scenarios back into runnable YAML.
+
+    Steps still marked `todo` are kept rather than dropped: they run as
+    soft-skips and stay visible in the log, so nothing a tester has not yet
+    filled in silently disappears from the suite.
+    """
+    import yaml as _yaml
+    body = request.get_json(silent=True) or {}
+    tests = []
+    for sc in body.get("scenarios") or []:
+        steps = []
+        for st in sc.get("steps") or []:
+            action = (st.get("action") or "todo").lower()
+            out = {"action": action, "target": st.get("target") or ""}
+            if action in ("fill", "select") or (st.get("value") or ""):
+                out["value"] = st.get("value") or ""
+            steps.append(out)
+        if not steps:
+            continue
+        tests.append({
+            "screen": sc.get("screen") or "yourscreen",
+            "name":   sc.get("name") or "Untitled scenario",
+            "steps":  steps,
+        })
+    text = _yaml.safe_dump({"tests": tests}, sort_keys=False,
+                           default_flow_style=False, allow_unicode=True, width=100)
+    return jsonify({"yaml": text, "n_tests": len(tests)})
 
 
 @app.route("/api/import-testcases", methods=["POST"])

@@ -511,12 +511,21 @@ def _execute_custom_steps(page, steps: list, t: _Tracker, screen_label: str) -> 
             if action == "open_search":
                 # LENIENT: many Stratus screens have search visible by default.
                 # Try common toggle selectors; if none present, skip — that's OK.
+                # 600ms was too short for this SPA: the toggle is rendered after
+                # the screen's JS module loads, so the click was missed and every
+                # later step then failed on a still-hidden search panel.
                 clicked = _try_click_any(page, [
                     "#ShowCriteria", "[name='ShowCriteria']",
                     "button:has-text('Show Search Criteria')",
                     "a:has-text('Show Search Criteria')",
-                ], timeout_ms=600)
-                if not clicked:
+                ], timeout_ms=5_000)
+                if clicked:
+                    # Let the panel finish expanding before anything inside it is used.
+                    try:
+                        page.wait_for_timeout(400)
+                    except Exception:
+                        pass
+                else:
                     notes.append(f"step {step_i}: no ShowCriteria toggle (search may be visible by default — continuing)")
 
             elif action == "fill":
@@ -585,17 +594,30 @@ def _execute_custom_steps(page, steps: list, t: _Tracker, screen_label: str) -> 
                     notes.append(f"step {step_i}: error words found: {found}")
                     return False, notes
 
-            elif action == "assert_rows_min":
+            elif action in ("assert_rows_min", "assert_rows_max"):
+                # The NL converter sometimes emits a bare row assertion with no
+                # count ("check results are returned"). int(None) raised a
+                # TypeError that surfaced as a step error, which reads like the
+                # screen misbehaved when really the test never said what to
+                # compare against. Treat a missing bound as "at least one row"
+                # for _min and as no upper limit for _max.
+                bound = _as_int(target)
                 n = page.locator("tr.jqgrow").count()
-                if n < int(target):
-                    notes.append(f"step {step_i}: only {n} rows < min {target}")
-                    return False, notes
-
-            elif action == "assert_rows_max":
-                n = page.locator("tr.jqgrow").count()
-                if n > int(target):
-                    notes.append(f"step {step_i}: {n} rows > max {target}")
-                    return False, notes
+                if action == "assert_rows_min":
+                    if bound is None:
+                        bound = 1
+                        notes.append(f"step {step_i}: no row count given — "
+                                     f"assuming at least 1")
+                    if n < bound:
+                        notes.append(f"step {step_i}: only {n} rows < min {bound}")
+                        return False, notes
+                else:
+                    if bound is None:
+                        notes.append(f"step {step_i}: no row count given — "
+                                     f"upper bound not checked")
+                    elif n > bound:
+                        notes.append(f"step {step_i}: {n} rows > max {bound}")
+                        return False, notes
 
             elif action == "screenshot":
                 fname = f"{screen_label}_{target or step_i}"
@@ -618,6 +640,23 @@ def _execute_custom_steps(page, steps: list, t: _Tracker, screen_label: str) -> 
             notes.append(f"step {step_i} ({action}) error: {str(e)[:140]}")
             return False, notes
     return True, notes
+
+
+def _as_int(value):
+    """Row-count bound from a step, or None when the step didn't supply one.
+
+    Steps reach here straight from YAML, so the value may be absent, an empty
+    string, or already an int.
+    """
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return int(text)
+    except ValueError:
+        return None
 
 
 def _find_field(page, target: str):

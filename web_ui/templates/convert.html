@@ -7,8 +7,10 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;450;500;600;700&display=swap">
-<link rel="stylesheet" href="{{ url_for('static', filename='convert.css') }}">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;450;500;600;700&family=Inter:wght@400;450;500;550;600&display=swap">
+<link rel="stylesheet" href="{{ url_for('static', filename='convert.css') }}?v={{ asset_v('convert.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='review.css') }}?v={{ asset_v('review.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='sheet.css') }}?v={{ asset_v('sheet.css') }}">
 </head>
 <body>
 
@@ -84,10 +86,10 @@
           <input class="inp" id="ticket" value="" placeholder="e.g. STRAT-12345">
           <div class="hint">Found in your file name. Links this test to the ticket so reports show what was tested.</div>
 
-          <label class="f">Where should the test run?</label>
+          <label class="f">Where should the test run? <small>(optional)</small></label>
           <select class="sel" id="server"></select>
-          <div class="srvline"><span class="dot" id="serverdot"></span><span id="serverstate">not checked yet</span><span class="chk" id="servercheck">Check this server</span></div>
-          <div class="hint">Tests always run on a practice copy of the system. The live store is never touched.</div>
+          <div class="srvline"><span class="dot" id="serverdot"></span><span id="serverstate">not checked yet</span></div>
+          <div class="hint">Pick a saved server to fill the connection in for you, or just type the address at the last step. Tests always run on a practice copy — the live store is never touched.</div>
 
           <label class="f">How should it run?</label>
           <div class="toggle">
@@ -139,11 +141,52 @@
       <div style="margin-left:auto;display:flex;gap:7px" id="chips"></div>
     </div>
 
-    <div class="qhead hidden" id="qhead">—</div>
-    <div id="questions"></div>
+    <div class="orient" id="orient">
+      <p>We read every line and turned the ones that describe an action into things a
+         browser can do &mdash; clicking, typing, and checking that something is on screen.
+         We call each one a <b>step</b>.</p>
+      <p>Read down the list the way you&rsquo;d read your own test script. Where we&rsquo;ve
+         asked you a question, answer it. Then choose Run the test.</p>
+      <p class="quiet">Most lines never become steps. Headings, database setup and expected
+         results have nothing to click, so we keep them beside the test as notes.
+         That&rsquo;s normal. You&rsquo;re done when &ldquo;questions for you&rdquo; reaches 0.</p>
+    </div>
 
-    <div class="acc" id="acc"><span><i class="ti ti-chevron-down" id="accicon"></i>&nbsp; See the <span id="acccount">0</span> steps we understood</span><span class="chip ok">all good</span></div>
-    <div class="accbody" id="accbody"></div>
+    <div class="sheetpick hidden" id="sheetpick">
+      <div class="sp-h">Which sheet holds your test cases?</div>
+      <div class="sp-list" id="splist"></div>
+    </div>
+
+    <div class="edtools hidden" id="edtools">
+      <div class="srchwrap">
+        <i class="ti ti-search"></i>
+        <input class="inp srch" id="q" placeholder="Search scenarios and steps…">
+      </div>
+      <label class="chk"><input type="checkbox" id="onlyneeds"> Only show what needs input</label>
+      <span class="edspacer"></span>
+      <button class="abtn" id="expandall" type="button">Expand all</button>
+      <button class="abtn" id="collapseall" type="button">Collapse all</button>
+    </div>
+    <div id="list"></div>
+
+    <!-- whole-file YAML: what will actually run, once every scenario is checked -->
+    <div class="filebar hidden" id="filebar">
+      <div class="filebar-h">
+        <div>
+          <div class="filebar-t">The test file</div>
+          <div class="filebar-s" id="filesub">&mdash;</div>
+        </div>
+        <button class="donebtn" id="donebtn" type="button">Save this test file</button>
+      </div>
+      <details class="rawwrap" id="rawwrap">
+        <summary>Show the file as text</summary>
+        <p class="rawnote">This is the same test written the way the tool stores it.
+           Editing above is safer &mdash; if you change the text here, choose
+           <b>Use this text instead</b> to apply it.</p>
+        <textarea class="yamlbox" id="filey" spellcheck="false"></textarea>
+        <button class="abtn" id="useraw" type="button">Use this text instead</button>
+      </details>
+    </div>
 
     <span class="techtoggle" id="techtoggle"><i class="ti ti-code"></i> Show &amp; edit the technical file (for developers)</span>
     <div class="techwrap" id="tech">
@@ -157,11 +200,58 @@
       <div class="technote">Most testers never open this. It's here for developers, or when you want to fine-tune something by hand — your edits are checked before saving, and you can always undo.</div>
     </div>
 
+    <div class="conn" id="conn">
+      <div class="connhead">
+        <span><i class="ti ti-server-2"></i> &nbsp;Where should this run?</span>
+        <span class="connstate"><span class="dot" id="conndot"></span><span id="connstate">not checked yet</span></span>
+      </div>
+      <div class="connbody">
+        <div class="connrow">
+          <div class="cf wide">
+            <label class="cl" for="cnUrl">BackOffice address</label>
+            <input class="inp" id="cnUrl" type="url" spellcheck="false" autocomplete="off"
+                   placeholder="https://your-server:8443/backoffice/">
+          </div>
+          <div class="cf">
+            <label class="cl" for="cnMachine">Machine ID <span class="opt">(optional)</span></label>
+            <input class="inp" id="cnMachine" spellcheck="false" autocomplete="off" placeholder="100">
+          </div>
+        </div>
+        <div class="connrow">
+          <div class="cf">
+            <label class="cl" for="cnUser">Username</label>
+            <input class="inp" id="cnUser" spellcheck="false" autocomplete="off" placeholder="BackOffice login">
+          </div>
+          <div class="cf">
+            <label class="cl" for="cnPass">Password</label>
+            <input class="inp" id="cnPass" type="password" autocomplete="new-password" placeholder="••••••••">
+          </div>
+          <div class="cf shrink">
+            <label class="cl">&nbsp;</label>
+            <button class="abtn" id="cntest" type="button">Test connection</button>
+          </div>
+        </div>
+        <p class="connnote"><i class="ti ti-lock"></i> Used for this run only. Not saved to disk, and not kept once you close the page.</p>
+      </div>
+    </div>
+
     <div class="actions">
       <button class="abtn primary" id="runbtn"><i class="ti ti-player-play"></i> Run the test now</button>
       <button class="abtn" id="savebtn">Save to my library</button>
       <button class="abtn ghost" id="startover">Start over</button>
     </div>
+    <div class="live hidden" id="live">
+      <div class="livehead">
+        <span class="livetitle"><span class="pulse" id="livepulse"></span><span id="livestate">Starting the test…</span></span>
+        <span class="livecounts" id="livecounts"></span>
+      </div>
+      <div class="livelog" id="livelog"></div>
+      <div class="livesum hidden" id="livesum"></div>
+      <div class="liveacts">
+        <button class="abtn" id="livedone" type="button">Back to the test</button>
+      </div>
+    </div>
+
     <div class="autosave"><i class="ti ti-device-floppy"></i> Saved automatically — you can close this page and come back anytime.</div>
   </div>
 
@@ -169,6 +259,6 @@
 </div>
 
 <div id="toast"></div>
-<script src="{{ url_for('static', filename='convert.js') }}"></script>
+<script src="{{ url_for('static', filename='convert.js') }}?v={{ asset_v('convert.js') }}"></script>
 </body>
 </html>

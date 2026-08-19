@@ -1,0 +1,290 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Review screen — 2026 product surface
+
+   The information architecture is unchanged: one kind per source line, steps
+   nested under the sentence that produced them, and exactly one accent that
+   means "we asked you something". What changes here is the surface.
+
+   The previous pass set the tester's sentences in a serif on paper stock. It
+   was internally consistent but it read as a document, and this is a tool
+   somebody opens every day. Modern product UI carries the human/machine
+   distinction with weight and colour instead of a second typeface, keeps the
+   type scale tight, and earns depth from layered surfaces rather than rules.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root{
+  --bg:#FAFAFA;
+  --panel:#FFFFFF;
+  --panel-2:#FAFAFA;
+  --panel-3:#F4F4F5;
+
+  --fg:#18181B;
+  --fg-2:#52525B;
+  --fg-3:#71717A;
+  --fg-4:#A1A1AA;
+
+  --border:rgba(9,9,11,.07);
+  --border-2:rgba(9,9,11,.12);
+
+  /* One accent. It appears only where the tester has a decision to make. */
+  --accent:#5B5BD6;
+  --accent-hover:#4F4FC4;
+  --accent-soft:#F1F1FE;
+  --accent-border:#DCDCFA;
+
+  --ok:#3E8E52;
+  --ok-soft:#EDF7EF;
+  --ok-border:#CBE5D2;
+
+  --radius:10px;
+  --radius-sm:7px;
+  --shadow-xs:0 1px 2px rgba(9,9,11,.04);
+  --shadow-sm:0 1px 3px rgba(9,9,11,.05),0 1px 2px rgba(9,9,11,.03);
+  --shadow-md:0 4px 12px rgba(9,9,11,.07),0 1px 3px rgba(9,9,11,.04);
+
+  --ui:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+
+body{background:var(--bg);color:var(--fg-2);font-family:var(--ui);
+     -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+
+/* ── orientation ─────────────────────────────────────────────────────── */
+.orient{font-family:var(--ui);font-size:13.5px;line-height:1.65;color:var(--fg-2);
+        max-width:62ch;margin:0 0 26px;letter-spacing:-.006em}
+.orient p{margin:0 0 8px}
+.orient p:last-child{margin-bottom:0}
+.orient .quiet{color:var(--fg-3);font-size:13px}
+.orient b{color:var(--fg);font-weight:550}
+
+/* ── scenario card ───────────────────────────────────────────────────── */
+.scen{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+      margin:0 0 10px;box-shadow:var(--shadow-xs);overflow:hidden;
+      transition:box-shadow .14s ease,border-color .14s ease}
+.scen:hover{box-shadow:var(--shadow-sm)}
+.scen.open{box-shadow:var(--shadow-md);border-color:var(--border-2);margin-bottom:18px}
+.sc-head{display:flex;align-items:center;gap:11px;padding:13px 15px;cursor:pointer;
+         border:0;background:none;transition:background .12s ease}
+.sc-head:hover{background:var(--panel-2)}
+.caret{color:var(--fg-4);font-size:14px;flex:none;transition:transform .16s ease}
+.scen.open .caret{transform:rotate(90deg)}
+.sc-name{font-family:var(--ui);font-size:13.5px;font-weight:550;color:var(--fg);
+         letter-spacing:-.011em;line-height:1.45}
+.sc-meta{display:flex;align-items:center;gap:7px;margin-top:3px;
+         font-size:12px;color:var(--fg-3);letter-spacing:-.004em}
+.sc-count{font-variant-numeric:tabular-nums}
+.sc-need{color:var(--accent);font-weight:500}
+.steps{border-top:1px solid var(--border);background:var(--panel-2);
+       padding:16px 15px 14px}
+
+/* ── one source line ─────────────────────────────────────────────────── */
+.ln{position:relative;margin:0 0 3px;padding:9px 12px 9px 13px;border-radius:var(--radius-sm)}
+.ln::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:2px;
+            border-radius:2px;background:var(--border-2)}
+.ln:has(.lstat)::before{background:var(--border)}
+.ln-plain::before{background:var(--border-2)}
+
+/* the tester's own sentence: weight and colour carry it, not a serif */
+.ln-src{font-family:var(--ui);font-size:13.5px;font-weight:500;color:var(--fg);
+        line-height:1.55;letter-spacing:-.009em;margin:0 0 7px}
+.ln-extra{font-family:var(--ui);font-size:13.5px;font-weight:500;color:var(--fg);
+          line-height:1.55;letter-spacing:-.009em;margin:0 0 4px}
+.lstat{font-family:var(--ui);font-size:12.5px;color:var(--fg-3);line-height:1.6;
+       max-width:64ch;letter-spacing:-.004em}
+
+/* ── the machine's steps ─────────────────────────────────────────────── */
+.srow{display:flex;align-items:center;gap:10px;padding:4px 8px;border-radius:6px;
+      background:none;transition:background .1s ease}
+.srow:hover{background:var(--panel-3)}
+.srow:focus{background:var(--accent-soft);outline:none;
+            box-shadow:inset 0 0 0 1px var(--accent-border)}
+.srn{font-family:var(--mono);font-size:10.5px;color:var(--fg-4);min-width:16px;
+     text-align:right;font-variant-numeric:tabular-nums;flex:none}
+.ssent{flex:1;font-family:var(--mono);font-size:12px;color:var(--fg-2);line-height:1.7;
+       letter-spacing:-.01em}
+.chip-v{background:none;border:0;padding:0;margin-right:8px;font-family:var(--mono);
+        font-size:12px;color:var(--fg-4);letter-spacing:0}
+.chip-v:hover{color:var(--accent);text-decoration:underline;filter:none}
+.chip-s{background:var(--panel);border:1px solid var(--border-2);border-radius:5px;
+        padding:1.5px 6px;font-family:var(--mono);font-size:12px;color:var(--fg);
+        transition:border-color .1s ease,background .1s ease}
+.chip-s:hover{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.chip-s.hole{background:var(--accent-soft);border:1px dashed var(--accent-border);
+             color:var(--accent);font-style:normal}
+.chip-edit{font-family:var(--mono);font-size:12px;padding:1.5px 6px;border-radius:5px;
+           border:1px solid var(--accent);background:var(--panel);
+           box-shadow:0 0 0 3px var(--accent-soft)}
+.smenu{opacity:0;color:var(--fg-4);font-size:14px;border-radius:5px;
+       transition:opacity .12s ease}
+.srow:hover .smenu,.srow:focus .smenu{opacity:1}
+.smenu:hover{background:var(--panel-3);color:var(--fg-2)}
+
+/* ── the question: a card, not a wash ────────────────────────────────── */
+.ln.ask{background:var(--panel);border:1px solid var(--accent-border);
+        box-shadow:var(--shadow-sm);padding:14px 16px 15px 17px;margin:10px 0 12px}
+.ln.ask::before{background:var(--accent);top:14px;bottom:14px;left:0;width:3px}
+.ln.ask .ln-src{margin-bottom:9px}
+.qn{display:inline-flex;align-items:center;gap:5px;font-family:var(--ui);font-size:10.5px;
+    font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.055em;
+    background:var(--accent-soft);border-radius:999px;padding:3px 9px;margin:0 0 10px}
+.qt{font-family:var(--ui);font-size:13.5px;color:var(--fg);line-height:1.6;
+    letter-spacing:-.008em;margin:0 0 13px;max-width:64ch}
+.qbtns{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.qb{font-family:var(--ui);font-size:12.5px;font-weight:500;padding:7px 14px;
+    border-radius:var(--radius-sm);cursor:pointer;letter-spacing:-.006em;
+    border:1px solid var(--border-2);background:var(--panel);color:var(--fg);
+    box-shadow:var(--shadow-xs);
+    transition:background .12s ease,border-color .12s ease,transform .06s ease}
+.qb:active{transform:translateY(.5px)}
+.qb.yes{background:var(--accent);border-color:var(--accent);color:#fff;
+        box-shadow:0 1px 2px rgba(91,91,214,.24)}
+.qb.yes:hover{background:var(--accent-hover);border-color:var(--accent-hover);filter:none}
+.qb.no:hover{background:var(--panel-3);border-color:var(--border-2)}
+.qb:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.qhint{font-family:var(--ui);font-size:12px;color:var(--fg-3);margin-top:10px;
+       line-height:1.55;letter-spacing:-.004em}
+
+/* ── counter + primary actions ───────────────────────────────────────── */
+.nextq{font-family:var(--ui);font-size:12.5px;font-weight:500;padding:7px 14px;
+       border-radius:var(--radius-sm);border:1px solid var(--accent-border);
+       background:var(--accent-soft);color:var(--accent);cursor:pointer;
+       letter-spacing:-.006em;transition:background .12s ease}
+.nextq:hover{background:#E7E7FC;filter:none}
+.alldone{display:inline-flex;align-items:center;gap:6px;font-family:var(--ui);
+         font-size:12.5px;font-weight:500;color:var(--ok);background:var(--ok-soft);
+         border:1px solid var(--ok-border);border-radius:999px;padding:4px 12px}
+
+/* ── added-by-hand group ─────────────────────────────────────────────── */
+.ln-added::before{background:repeating-linear-gradient(to bottom,
+  var(--accent-border) 0 4px,transparent 4px 8px)}
+.ln-src.added{font-family:var(--ui);font-size:10.5px;font-weight:600;color:var(--accent);
+              text-transform:uppercase;letter-spacing:.055em}
+
+/* ── footer, raw views ───────────────────────────────────────────────── */
+.scfoot{display:flex;flex-direction:column;align-items:flex-start;gap:12px;
+        margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
+.addstep{font-family:var(--ui);font-size:12.5px;padding:6px 12px;border-radius:var(--radius-sm);
+         border:1px dashed var(--border-2);background:var(--panel);color:var(--fg-3);
+         cursor:pointer;transition:all .12s ease}
+.addstep:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.scraw{width:100%}
+.scraw>summary,.rawwrap>summary{font-family:var(--ui);font-size:12.5px;color:var(--fg-3);
+       cursor:pointer;list-style:none;padding:3px 0;letter-spacing:-.004em}
+.scraw>summary::-webkit-details-marker,.rawwrap>summary::-webkit-details-marker{display:none}
+.scraw>summary:hover,.rawwrap>summary:hover{color:var(--accent)}
+.rawnote{font-family:var(--ui);font-size:12px;color:var(--fg-3);line-height:1.6;
+         max-width:64ch;margin:8px 0 9px}
+.rawnote b{color:var(--fg-2);font-weight:550}
+.yamlbox{font-family:var(--mono);font-size:11.5px;line-height:1.7;background:var(--panel);
+         border:1px solid var(--border-2);border-radius:var(--radius-sm);height:260px;
+         color:var(--fg-2);padding:12px 14px}
+.yamlbox:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+
+.filebar{margin-top:30px;border-top:1px solid var(--border);padding-top:20px}
+.filebar-t{font-family:var(--ui);font-size:14px;font-weight:550;color:var(--fg);
+           letter-spacing:-.011em}
+.filebar-s{font-family:var(--ui);font-size:12.5px;color:var(--fg-3);margin-top:2px}
+.donebtn{font-family:var(--ui);font-size:12.5px;font-weight:500;background:var(--fg);
+         border:0;border-radius:var(--radius-sm);padding:8px 16px;color:#fff;cursor:pointer;
+         letter-spacing:-.006em;box-shadow:var(--shadow-xs);transition:background .12s ease}
+.donebtn:hover{background:#27272A;filter:none}
+
+/* ── misc chrome ─────────────────────────────────────────────────────── */
+.okbtn{font-family:var(--ui);font-size:12px;font-weight:500;border:1px solid var(--border-2);
+       background:var(--panel);color:var(--fg-3);border-radius:var(--radius-sm);
+       padding:5px 11px;transition:all .12s ease}
+.okbtn:hover{border-color:var(--ok);color:var(--ok);background:var(--ok-soft)}
+.scen.done .okbtn{background:var(--ok-soft);border-color:var(--ok-border);color:var(--ok)}
+.linkbtn{color:var(--accent);font-family:var(--ui);font-size:12.5px;border-radius:5px}
+.linkbtn:hover{background:var(--accent-soft);text-decoration:none}
+.sheetpick{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+           box-shadow:var(--shadow-xs)}
+.sp-h{font-family:var(--ui);font-size:13px;font-weight:550;color:var(--fg);
+      letter-spacing:-.009em}
+.sp-btn{font-family:var(--ui);font-size:12.5px;border-radius:var(--radius-sm);
+        border-color:var(--border-2);transition:all .12s ease}
+.sp-btn:hover{border-color:var(--accent);color:var(--accent)}
+.sp-btn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.pre,.notes{border:1px solid var(--border);border-radius:var(--radius-sm);
+            background:var(--panel);box-shadow:none}
+.pre>summary,.notes>summary{font-family:var(--ui);font-size:12.5px;font-weight:500;
+       color:var(--fg-2);letter-spacing:-.006em}
+.pre-k{font-family:var(--ui);font-size:10px;font-weight:600;letter-spacing:.04em;
+       text-transform:uppercase;background:var(--panel-3);color:var(--fg-3);border-radius:4px}
+.pre-t{font-family:var(--ui);font-size:12.5px}
+
+@media (prefers-reduced-motion:reduce){
+  *{transition:none !important}
+}
+
+/* ── "tell us what to do" ─────────────────────────────────────────────
+   Each option names itself and labels its own box. "Target" and "value" are
+   the tool's words; "the button or link labelled" is the tester's. */
+.tellopts{display:flex;flex-direction:column;gap:2px;margin:0 0 12px}
+.tellrow{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;padding:9px 11px;
+         border-radius:var(--radius-sm);cursor:pointer;transition:background .1s ease}
+.tellrow:hover{background:var(--panel-3)}
+.tellrow:has(input:checked){background:var(--accent-soft);
+         box-shadow:inset 0 0 0 1px var(--accent-border)}
+.tellrow input[type=radio]{accent-color:var(--accent);margin:0;flex:none}
+.tellname{font-family:var(--ui);font-size:13px;font-weight:500;color:var(--fg);
+          letter-spacing:-.008em;min-width:180px}
+.tellform{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;flex:1}
+.tellword{font-family:var(--ui);font-size:12.5px;color:var(--fg-3)}
+.tellin{font-family:var(--ui);font-size:12.5px;padding:4px 8px;border-radius:6px;
+        border:1px solid var(--border-2);background:var(--panel);color:var(--fg);
+        min-width:130px;flex:1;max-width:220px}
+.tellin:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.tellhelp{font-family:var(--ui);font-size:12px;color:var(--fg-3);margin:0 0 13px;
+          line-height:1.55}
+.tellhelp b{color:var(--fg-2);font-weight:550}
+
+/* ── toolbar ──────────────────────────────────────────────────────────────
+   This container had no rules at all — it was falling back to block flow, so
+   the field, the checkbox and both buttons stacked on separate lines and read
+   as clutter. One row, three groups, with the pair of view controls joined
+   into a segmented control so they read as one choice rather than two. */
+.edtools{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+         margin:0 0 18px;padding:0}
+.edspacer{flex:1 1 auto;min-width:0}
+
+/* search */
+.srchwrap{position:relative;flex:0 1 300px;min-width:200px}
+.srchwrap .ti{position:absolute;left:11px;top:50%;transform:translateY(-50%);
+              color:var(--fg-4);font-size:14px;pointer-events:none}
+.inp.srch{width:100%;padding:7px 12px 7px 32px;font-family:var(--ui);font-size:12.5px;
+          color:var(--fg);background:var(--panel);border:1px solid var(--border-2);
+          border-radius:var(--radius-sm);letter-spacing:-.006em;
+          box-shadow:var(--shadow-xs);transition:border-color .12s ease,box-shadow .12s ease}
+.inp.srch::placeholder{color:var(--fg-4)}
+.inp.srch:focus{outline:none;border-color:var(--accent);
+                box-shadow:0 0 0 3px var(--accent-soft)}
+
+/* filter checkbox */
+.chk{display:inline-flex;align-items:center;gap:7px;font-family:var(--ui);font-size:12.5px;
+     color:var(--fg-2);cursor:pointer;letter-spacing:-.006em;white-space:nowrap;
+     padding:6px 10px;border-radius:var(--radius-sm);border:1px solid transparent;
+     transition:background .12s ease,border-color .12s ease}
+.chk:hover{background:var(--panel-3)}
+.chk:has(input:checked){background:var(--accent-soft);border-color:var(--accent-border);
+                        color:var(--accent)}
+.chk input{accent-color:var(--accent);margin:0;flex:none}
+
+/* Expand / Collapse read as one control, not two competing buttons */
+.edtools .abtn{font-family:var(--ui);font-size:12.5px;font-weight:450;color:var(--fg-2);
+               background:var(--panel);border:1px solid var(--border-2);
+               padding:7px 13px;cursor:pointer;letter-spacing:-.006em;
+               box-shadow:var(--shadow-xs);transition:background .12s ease,color .12s ease}
+.edtools .abtn:hover{background:var(--panel-3);color:var(--fg)}
+.edtools #expandall{border-radius:var(--radius-sm) 0 0 var(--radius-sm);margin-right:-1px}
+.edtools #collapseall{border-radius:0 var(--radius-sm) var(--radius-sm) 0}
+.edtools .abtn:focus-visible{outline:2px solid var(--accent);outline-offset:1px;
+                             position:relative;z-index:1}
+
+@media (max-width:640px){
+  .edtools{gap:9px}
+  .srchwrap{flex:1 1 100%}
+  .edspacer{display:none}
+}
+/* cancel the toolbar gap between the two view buttons so they read as one control */
+.edtools #collapseall{margin-left:-12px}

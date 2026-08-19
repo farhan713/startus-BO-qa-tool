@@ -366,6 +366,63 @@ label.f small{font-weight:450;text-transform:none;letter-spacing:0;color:var(--i
 .tbtn.go:hover{background:#096544}
 .technote{background:var(--surface-2);border-top:1px solid var(--line);padding:12px 16px;font-size:12px;color:var(--ink-3);line-height:1.6}
 
+
+/* ---------- run connection (stage 3) ---------- */
+.conn{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);
+  margin-top:22px;overflow:hidden;box-shadow:var(--sh-1)}
+.connhead{display:flex;align-items:center;justify-content:space-between;gap:14px;
+  padding:13px 18px;background:var(--surface-2);border-bottom:1px solid var(--line);
+  font-size:13.5px;font-weight:550;color:var(--ink)}
+.connhead i{color:var(--ink-3)}
+.connstate{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:450;color:var(--ink-3)}
+.connbody{padding:18px}
+.connrow{display:flex;gap:14px;flex-wrap:wrap}
+.connrow+.connrow{margin-top:14px}
+.cf{flex:1 1 190px;min-width:0;display:flex;flex-direction:column}
+.cf.wide{flex:2 1 340px}
+.cf.shrink{flex:0 0 auto;justify-content:flex-end}
+.cf.shrink .abtn{padding:11px 18px;flex:none}
+.cl{font-size:11px;font-weight:600;color:var(--ink-3);text-transform:uppercase;
+  letter-spacing:.07em;margin-bottom:7px}
+.cl .opt{font-weight:450;text-transform:none;letter-spacing:0;color:var(--ink-4)}
+.connnote{display:flex;align-items:center;gap:7px;margin-top:15px;font-size:12px;color:var(--ink-3)}
+.connnote i{color:var(--ready)}
+@media(max-width:640px){.cf,.cf.wide{flex:1 1 100%}.cf.shrink{flex:1 1 100%}}
+
+
+/* ---------- live run (stage 3) ---------- */
+.live{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);
+  margin-top:22px;overflow:hidden;box-shadow:var(--sh-1)}
+.livehead{display:flex;align-items:center;justify-content:space-between;gap:14px;
+  padding:14px 18px;border-bottom:1px solid var(--line);background:var(--surface-2)}
+.livetitle{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600;color:var(--ink)}
+.pulse{width:9px;height:9px;border-radius:50%;background:var(--brand);flex:0 0 auto;
+  box-shadow:0 0 0 0 rgba(43,79,224,.55);animation:lp 1.6s infinite}
+.pulse.ok{background:var(--ready);animation:none;box-shadow:0 0 0 3px var(--ready-tint)}
+.pulse.bad{background:var(--danger);animation:none;box-shadow:0 0 0 3px var(--danger-tint)}
+@keyframes lp{70%{box-shadow:0 0 0 9px rgba(43,79,224,0)}100%{box-shadow:0 0 0 0 rgba(43,79,224,0)}}
+.livecounts{display:flex;gap:7px}
+.livelog{max-height:320px;overflow-y:auto;padding:8px 0;background:var(--surface)}
+.lrow{display:flex;gap:11px;padding:6px 18px;font-size:13px;line-height:1.5;align-items:flex-start}
+.lrow .li{width:16px;flex:0 0 16px;text-align:center;font-size:11px;margin-top:2px}
+.lrow.section{font-weight:600;color:var(--ink);border-top:1px solid var(--line);margin-top:6px;padding-top:11px}
+.lrow.ok .li{color:var(--ready)} .lrow.fail .li{color:var(--needs)}
+.lrow.info,.lrow.screenshot{color:var(--ink-3)}
+.lrow.fail{color:var(--ink-2)}
+.liveacts{display:flex;gap:10px;padding:14px 18px;border-top:1px solid var(--line);background:var(--surface-2)}
+.liveacts .abtn{flex:0 0 auto;text-decoration:none;display:inline-flex;align-items:center}
+
+.livesum{padding:16px 18px;border-top:1px solid var(--line);background:var(--surface)}
+.sumrow{display:flex;gap:22px;flex-wrap:wrap;margin-bottom:12px}
+.sumcell{display:flex;flex-direction:column;gap:2px}
+.sumcell .sv{font-size:22px;font-weight:600;color:var(--ink);letter-spacing:-.02em;line-height:1}
+.sumcell .sl{font-size:11.5px;color:var(--ink-3)}
+.sumcell.good .sv{color:var(--ready)} .sumcell.bad .sv{color:var(--needs)}
+.sumfails{border:1px solid var(--line);border-radius:var(--r-sm);max-height:190px;overflow-y:auto}
+.sumfail{padding:9px 13px;font-size:12.5px;color:var(--ink-2);border-bottom:1px solid var(--line);line-height:1.5}
+.sumfail:last-child{border-bottom:none}
+.sumfail b{display:block;color:var(--ink);font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:11.5px;margin-bottom:3px}
+
 /* ---------- finish ---------- */
 .actions{display:flex;gap:11px;margin-top:24px}
 .abtn{

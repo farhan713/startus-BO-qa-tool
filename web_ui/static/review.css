@@ -1,0 +1,295 @@
+/* Review & edit screen — scenario/step editor.
+   Inherits every colour token from convert.css; only layout lives here.
+   The two states a tester cares about are "ready" and "needs input", so those
+   are the only two accents used, and they reuse --ready / --needs so the page
+   reads as the same product as Convert. */
+
+.rv{max-width:1080px;margin:0 auto;padding:28px 20px 140px}
+.hidden{display:none !important}
+
+/* ---------- inline badge ---------- */
+.ib{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;
+    font-weight:600;line-height:18px;vertical-align:baseline}
+.ib.needs{background:var(--needs-tint);color:var(--needs);border:1px solid var(--needs-line)}
+.ib.ready{background:var(--ready-tint);color:var(--ready);border:1px solid var(--ready-line)}
+
+/* ---------- upload ---------- */
+.drop{padding:0;overflow:hidden}
+.drop-in{display:flex;flex-direction:column;align-items:center;gap:8px;
+         padding:44px 20px 34px;cursor:pointer;text-align:center;
+         border-bottom:1px solid var(--line)}
+.drop-in:hover{background:var(--surface-2)}
+.drop-in .ti{font-size:34px;color:var(--brand)}
+.drop-t{font-size:17px;font-weight:600;color:var(--ink)}
+.drop-s{font-size:13.5px;color:var(--ink-3);margin-bottom:6px}
+.drop-foot{padding:16px 20px;background:var(--surface-2)}
+.fl{display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--ink-2)}
+.fl .inp{max-width:260px}
+
+/* ---------- summary ---------- */
+.sum{padding:18px 20px}
+.sum-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.sum-file{font-size:16px;font-weight:600;color:var(--ink)}
+.sum-sub{font-size:13px;color:var(--ink-3);margin-top:2px}
+.bar{height:8px;border-radius:999px;background:var(--line);overflow:hidden;margin:14px 0 10px}
+.bar-fill{height:100%;background:var(--ready);border-radius:999px;
+          width:0;transition:width .35s ease}
+.sum-stats{display:flex;flex-wrap:wrap;gap:18px;font-size:13.5px;color:var(--ink-2)}
+.stat b{color:var(--ink);font-weight:600}
+.stat.ready b{color:var(--ready)}
+.stat.needs b{color:var(--needs)}
+
+/* ---------- toolbar ---------- */
+.toolbar{display:flex;justify-content:space-between;align-items:center;
+         gap:16px;flex-wrap:wrap;margin:22px 2px 12px}
+.tb-left{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.srchwrap{position:relative}
+.srchwrap .ti{position:absolute;left:10px;top:50%;transform:translateY(-50%);
+              color:var(--ink-4);font-size:16px}
+.inp.srch{padding-left:32px;width:300px}
+.chk{display:flex;align-items:center;gap:7px;font-size:13.5px;color:var(--ink-2);cursor:pointer}
+
+/* ---------- scenario card ---------- */
+.scen{background:var(--surface);border:1px solid var(--line);border-radius:10px;
+      margin-bottom:12px;overflow:hidden}
+.scen.open{border-color:var(--line-2);box-shadow:0 1px 3px rgba(22,32,43,.06)}
+.sc-head{display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;
+         user-select:none}
+.sc-head:hover{background:var(--surface-2)}
+.caret{color:var(--ink-4);font-size:17px;transition:transform .18s ease;flex:none}
+.scen.open .caret{transform:rotate(90deg)}
+.sc-main{flex:1;min-width:0}
+.sc-name{font-size:14.5px;font-weight:600;color:var(--ink);
+         white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc-meta{display:flex;align-items:center;gap:8px;margin-top:3px;flex-wrap:wrap}
+.chip{font-size:11.5px;font-weight:500;padding:1px 7px;border-radius:4px;
+      background:var(--brand-tint);color:var(--brand-ink);border:1px solid var(--brand-line)}
+.sc-count{font-size:12.5px;color:var(--ink-3)}
+.sc-badges{display:flex;gap:6px;flex:none}
+
+/* ---------- steps ---------- */
+.steps{border-top:1px solid var(--line);padding:10px 16px 14px;background:var(--surface-2)}
+.strow{display:grid;grid-template-columns:26px 116px 1fr 1fr 30px;gap:8px;
+       align-items:center;padding:5px 0}
+.stn{font-size:12px;color:var(--ink-4);text-align:right;font-variant-numeric:tabular-nums}
+.strow select,.strow input{width:100%;font:inherit;font-size:13px;padding:6px 8px;
+       border:1px solid var(--line-2);border-radius:6px;background:var(--surface);
+       color:var(--ink);min-width:0}
+.strow input::placeholder{color:var(--ink-4)}
+.strow select:focus,.strow input:focus{outline:none;border-color:var(--brand);
+       box-shadow:0 0 0 3px var(--brand-tint)}
+.strow.needs select{border-color:var(--needs-line);background:var(--needs-tint)}
+.strow.needs input{border-color:var(--needs-line)}
+.del{border:none;background:none;color:var(--ink-4);cursor:pointer;font-size:16px;
+     padding:4px;border-radius:5px;line-height:1}
+.del:hover{color:var(--danger);background:var(--danger-tint)}
+.sthead{display:grid;grid-template-columns:26px 116px 1fr 1fr 30px;gap:8px;
+        font-size:11.5px;font-weight:600;color:var(--ink-3);
+        text-transform:uppercase;letter-spacing:.04em;padding-bottom:5px}
+.addstep{margin-top:9px;font-size:13px;color:var(--brand);background:none;
+         border:1px dashed var(--brand-line);border-radius:6px;padding:6px 12px;cursor:pointer}
+.addstep:hover{background:var(--brand-tint)}
+.expect{margin-top:12px;padding:10px 12px;background:var(--surface);
+        border:1px solid var(--line);border-radius:7px;font-size:13px;color:var(--ink-2)}
+.expect b{color:var(--ink);font-weight:600;display:block;margin-bottom:3px;font-size:12px;
+          text-transform:uppercase;letter-spacing:.04em}
+
+/* ---------- sticky action bar ---------- */
+.actionbar{position:fixed;left:0;right:0;bottom:0;z-index:40;
+           background:var(--surface);border-top:1px solid var(--line-2);
+           box-shadow:0 -2px 12px rgba(22,32,43,.07);
+           padding:12px 24px;display:flex;justify-content:space-between;
+           align-items:center;gap:16px;flex-wrap:wrap}
+.ab-note{font-size:13.5px;color:var(--ink-2)}
+.ab-btns{display:flex;gap:10px}
+
+/* ---------- yaml ---------- */
+.yh{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.yh-t{font-size:15px;font-weight:600;color:var(--ink)}
+.abtn.tiny{padding:4px 10px;font-size:12.5px}
+.empty{text-align:center;padding:40px 20px;color:var(--ink-3);font-size:14px}
+
+@media (max-width:760px){
+  .strow,.sthead{grid-template-columns:22px 1fr;row-gap:6px}
+  .sthead{display:none}
+  .inp.srch{width:100%}
+}
+
+/* ---------- row kinds ----------
+   Only "Needs input" is amber (a tester must act). Setup / Permission / Rule
+   are neutral-to-informational: they explain why a row is not automated, so
+   they must not read as 94 outstanding jobs. */
+.ib.setup{background:var(--brand-tint);color:var(--brand-ink);border:1px solid var(--brand-line)}
+.ib.perm {background:#F1EEFB;color:#5B43B8;border:1px solid #D8CFF3}
+.ib.rule {background:var(--surface-2);color:var(--ink-3);border:1px solid var(--line-2)}
+.strow.setup select,.strow.perm select,.strow.rule select{background:var(--surface-2);color:var(--ink-3)}
+.strow.setup input,.strow.perm input,.strow.rule input{border-color:var(--line);color:var(--ink-3)}
+.kindtag{font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px;white-space:nowrap}
+.kindtag.step {background:var(--needs-tint);color:var(--needs)}
+.kindtag.setup{background:var(--brand-tint);color:var(--brand-ink)}
+.kindtag.perm {background:#F1EEFB;color:#5B43B8}
+.kindtag.rule {background:var(--surface-2);color:var(--ink-3)}
+.strow{grid-template-columns:26px 116px 1fr 1fr 84px 30px}
+.sthead{grid-template-columns:26px 116px 1fr 1fr 84px 30px}
+@media (max-width:760px){
+  .strow,.sthead{grid-template-columns:22px 1fr}
+}
+
+/* ---------- original vs converted ----------
+   The tester's own words on the left, what the tool made of them on the right.
+   Seeing both is what makes an edit an informed correction rather than a guess. */
+.cmp{display:grid;grid-template-columns:minmax(240px,0.85fr) minmax(0,1.4fr);gap:18px}
+.cmp-side{min-width:0}
+.cmp-h{font-size:11.5px;font-weight:600;color:var(--ink-3);text-transform:uppercase;
+       letter-spacing:.04em;margin:2px 0 7px}
+.orig-pre{margin:0 0 14px;padding:11px 13px;background:var(--surface);
+          border:1px solid var(--line);border-radius:7px;
+          font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;
+          line-height:1.62;color:var(--ink-2);white-space:pre-wrap;word-break:break-word;
+          max-height:280px;overflow:auto}
+.sc-name{white-space:normal}          /* long scenario names must not be clipped */
+
+/* ---------- whole-file yaml + done ---------- */
+.filebar{margin-top:26px;border-top:1px solid var(--line-2);padding-top:18px}
+.filebar-h{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.filebar-t{font-size:15px;font-weight:600;color:var(--ink)}
+.filebar-s{font-size:13px;color:var(--ink-3);margin-top:2px}
+.yamlbox{width:100%;height:260px;margin-top:12px;padding:12px 14px;
+         border:1px solid var(--line-2);border-radius:8px;background:var(--surface-2);
+         font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;
+         line-height:1.6;color:var(--ink-2);resize:vertical}
+.donebtn{padding:10px 22px;font-size:14px;font-weight:600;border:none;border-radius:8px;
+         background:var(--ready);color:#fff;cursor:pointer}
+.donebtn:hover{filter:brightness(1.06)}
+.donebtn[disabled]{opacity:.55;cursor:not-allowed}
+
+@media (max-width:900px){ .cmp{grid-template-columns:1fr} }
+
+/* ---------- sheet picker ----------
+   A workbook has several tabs and only the tester knows which one holds the
+   tests. Reading whichever tab Excel left active imported the wrong sheet
+   silently, which is the worst kind of wrong: it looks like it worked. */
+.sheetpick{margin:0 0 16px;padding:14px 16px;background:var(--brand-tint);
+           border:1px solid var(--brand-line);border-radius:9px}
+.sp-h{font-size:13.5px;font-weight:600;color:var(--brand-ink);margin-bottom:9px}
+.sp-list{display:flex;gap:8px;flex-wrap:wrap}
+.sp-btn{padding:7px 13px;border-radius:7px;border:1px solid var(--line-2);
+        background:var(--surface);color:var(--ink-2);font:inherit;font-size:13px;
+        cursor:pointer;display:flex;align-items:center;gap:8px}
+.sp-btn:hover{border-color:var(--brand);color:var(--ink)}
+.sp-btn.on{border-color:var(--brand);background:var(--brand);color:#fff}
+.sp-btn .n{font-size:11.5px;opacity:.72}
+.sp-btn[disabled]{opacity:.45;cursor:not-allowed}
+
+/* ══════════════════ redesign: prose-grouped steps ══════════════════
+   The tester's sentence is the group header; its steps sit under it. No second
+   column — a two-column layout asserts row-for-row correspondence, and prose
+   to steps is 1→N, 1→0 and 0→1. */
+.grp{margin:0 0 14px;padding-left:14px;border-left:2px solid var(--line)}
+.grp-tool{border-left-color:var(--brand-line)}
+.grp-src{font-size:12.5px;color:var(--ink-3);line-height:1.55;margin-bottom:6px;
+         font-style:italic}
+.grp-tool .grp-src{color:var(--brand-ink);font-style:normal;font-weight:500}
+.grp-none{font-size:13px;color:var(--needs);background:var(--needs-tint);
+          border:1px dashed var(--needs-line);border-radius:7px;
+          padding:8px 12px;display:flex;align-items:center;gap:12px}
+
+/* ---------- step row: a sentence, not six controls ---------- */
+.srow{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:7px;
+      outline:none;position:relative}
+.srow:hover{background:var(--surface-2)}
+.srow:focus{background:var(--brand-tint);box-shadow:inset 0 0 0 1px var(--brand-line)}
+.srow.needs{box-shadow:inset 3px 0 0 var(--needs)}
+.srow.edited{box-shadow:inset 3px 0 0 var(--ready)}
+.srow.skipped{opacity:.55}
+.srn{font-size:11.5px;color:var(--ink-4);min-width:20px;text-align:right;
+     font-variant-numeric:tabular-nums;flex:none}
+.ssent{flex:1;font-size:13.5px;color:var(--ink-2);line-height:1.9}
+.chip-v,.chip-s{font:inherit;font-size:13px;border-radius:5px;cursor:pointer;
+                padding:2px 8px;border:1px solid transparent}
+.chip-v{background:var(--ink);color:#fff;font-weight:500}
+.chip-v:hover{filter:brightness(1.15)}
+.chip-s{background:var(--surface-2);border-color:var(--line-2);color:var(--ink)}
+.chip-s:hover{border-color:var(--brand);background:var(--brand-tint)}
+.chip-s.hole{background:var(--needs-tint);border:1px dashed var(--needs);
+             color:var(--needs);font-style:italic}
+.chip-edit{font:inherit;font-size:13px;padding:2px 7px;border:1px solid var(--brand);
+           border-radius:5px;background:var(--surface);color:var(--ink);
+           box-shadow:0 0 0 3px var(--brand-tint)}
+.smenu{border:none;background:none;color:var(--ink-4);cursor:pointer;font-size:15px;
+       padding:2px 6px;border-radius:5px;opacity:0}
+.srow:hover .smenu,.srow:focus .smenu{opacity:1}
+.smenu:hover{background:var(--line);color:var(--ink-2)}
+.pill{font-size:11px;padding:1px 7px;border-radius:999px;background:var(--line);
+      color:var(--ink-3)}
+
+/* ---------- preconditions + notes: folded, read-only ---------- */
+.pre,.notes{margin:0 0 14px;border:1px solid var(--line);border-radius:8px;
+            background:var(--surface);overflow:hidden}
+.notes{margin:6px 0 0;background:var(--surface-2)}
+.pre>summary,.notes>summary{cursor:pointer;padding:9px 13px;font-size:12.5px;
+       font-weight:600;color:var(--ink-2);display:flex;justify-content:space-between;
+       align-items:center;list-style:none}
+.pre>summary::-webkit-details-marker,.notes>summary::-webkit-details-marker{display:none}
+.pre>summary:hover,.notes>summary:hover{background:var(--surface-2)}
+.pre-n{font-weight:500;color:var(--ink-3)}
+.pre-row{display:flex;align-items:center;gap:11px;padding:8px 13px;
+         border-top:1px solid var(--line);font-size:13px;color:var(--ink-2)}
+.pre-k{font-size:11px;font-weight:600;padding:1px 7px;border-radius:4px;flex:none;
+       background:var(--brand-tint);color:var(--brand-ink)}
+.pre-t{flex:1;min-width:0;word-break:break-word}
+.note-row{padding:8px 13px;border-top:1px solid var(--line);font-size:12.5px;
+          color:var(--ink-3);line-height:1.55}
+.linkbtn{border:none;background:none;color:var(--brand);font:inherit;font-size:12.5px;
+         cursor:pointer;padding:2px 6px;border-radius:5px;flex:none}
+.linkbtn:hover{background:var(--brand-tint);text-decoration:underline}
+
+/* ---------- card header extras ---------- */
+.sc-need{font-size:12.5px;color:var(--needs);font-weight:500}
+.okbtn{border:1px solid var(--line-2);background:var(--surface);color:var(--ink-2);
+       font:inherit;font-size:12.5px;padding:5px 12px;border-radius:7px;cursor:pointer;flex:none}
+.okbtn:hover{border-color:var(--ready);color:var(--ready)}
+.scen.done .okbtn{background:var(--ready-tint);border-color:var(--ready-line);color:var(--ready)}
+.scfoot{padding-top:6px}
+.revprog{font-size:12.5px;color:var(--ink-3);margin-left:4px;align-self:center}
+#chips .chip{cursor:pointer;border:1px solid transparent}
+#chips .chip.on{outline:2px solid var(--brand);outline-offset:1px}
+
+/* ══════════ one rule: amber means "we asked, you haven't answered" ══════════
+   Enforceable at review: if a block has no buttons, it may not be coloured.
+   No red anywhere here — red is reserved for a step that failed in a real run,
+   or "failed" would mean two different things. */
+.ln{margin:0 0 4px;padding:9px 0 9px 14px;border-left:2px solid var(--line)}
+.ln.ask{border-left-color:var(--needs);background:var(--needs-tint);
+        border-radius:0 8px 8px 0;padding-right:14px}
+
+/* The tester's own sentence leads. Steps are subordinate to it. */
+.ln-src{font-size:13.5px;font-weight:600;color:var(--ink);line-height:1.5;margin-bottom:5px}
+.ln-extra{font-size:13px;font-weight:600;color:var(--ink);line-height:1.5;margin:2px 0}
+.lstat{font-size:12.5px;color:var(--ink-3);line-height:1.6;padding:2px 0}
+
+/* Question card — the only place colour is allowed. */
+.qcard2{padding:2px 0 2px}
+.qn{font-size:11.5px;font-weight:600;color:var(--needs);text-transform:none;
+    letter-spacing:0;margin-bottom:5px}
+.qt{font-size:13.5px;color:var(--ink);line-height:1.62;margin-bottom:11px}
+.qbtns{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+.qb{font:inherit;font-size:13px;font-weight:500;padding:7px 15px;border-radius:7px;
+    cursor:pointer;border:1px solid var(--line-2);background:var(--surface);color:var(--ink)}
+.qb.yes{background:var(--ink);border-color:var(--ink);color:#fff}
+.qb.yes:hover{filter:brightness(1.18)}
+.qb.no:hover{border-color:var(--ink-3);background:var(--surface-2)}
+.qhint{font-size:12.5px;color:var(--ink-3);margin-top:9px;line-height:1.55}
+
+/* Counter strip */
+.nextq{font:inherit;font-size:13.5px;font-weight:500;padding:8px 17px;border-radius:8px;
+       border:1px solid var(--needs-line);background:var(--needs-tint);color:var(--needs);
+       cursor:pointer}
+.nextq:hover{filter:brightness(.97)}
+.alldone{font-size:13.5px;color:var(--ready);font-weight:500}
+
+/* Orientation — plain body text, never a coloured box. */
+.orient{margin:0 0 20px;font-size:13.5px;line-height:1.7;color:var(--ink-2);max-width:70ch}
+.orient p{margin:0 0 9px}
+.orient .quiet{color:var(--ink-3)}
+.orient b{color:var(--ink);font-weight:600}

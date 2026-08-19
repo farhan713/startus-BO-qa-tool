@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import io
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 # ============================================================ Translator
@@ -102,6 +102,43 @@ _PATH_TAIL = r"(?:Back\s*Office\s*(?:>>|->|>|→)\s*)?(.+?)"
 
 
 # (regex, builder, label) — first match wins. Tested case-insensitively.
+
+# ---- Legacy arrow-chain segment builders (STRAT test sheets) -------------
+# A split "Path: ... -> search -> select -> Put Tag type -> save" leaves bare
+# segments that carry no verb. They are still perfectly typed steps: a known
+# button name is a click, "X Tab" is a click, and "Put <field>" is a fill whose
+# value the tester supplies. Emitting a typed step with an empty value beats a
+# todo, because the editor can then show a value box instead of raw prose.
+_BARE_BUTTONS = ("search","save","edit","delete","print","new","reset","close",
+                 "cancel","select","action","add","update","copy","submit",
+                 "apply","ok","next","back","refresh","export","import")
+
+def _r_bare_button(m):
+    return {"action": "click", "target": m.group(1).strip().title()}
+
+def _r_tab(m):
+    return {"action": "click", "target": m.group(1).strip()}
+
+def _r_put_field(m):
+    field = m.group(1).strip().rstrip(".").rstrip(",")
+    # Trailing parenthetical is guidance for the tester, not part of the name:
+    # "New Tag (Yes/No)" -> field "New Tag".
+    field = re.sub(r"\s*\([^)]*\)\s*$", "", field).strip()
+    return {"action": "fill", "target": field, "value": ""}
+
+
+def _r_named_button(m):
+    """"Search - Searches using selected options." -> click Search.
+
+    Legacy sheets document a screen's buttons as "<Button> - <what it does>".
+    The name before the dash is a real control, so this is a click, not prose.
+    Guarded to short names so "Buy/Trade Deal OH Aggregate 1 - 5" (a field whose
+    label happens to contain a dash) is not mistaken for a button."""
+    return {"action": "click", "target": m.group(1).strip()}
+
+def _r_verify_state(_):
+    return {"action": "assert_no_errors", "target": ""}
+
 RULES: list = [
     # ---- DB/state assertions — keep as todo with the prose preserved ------
     (re.compile(r"\btb_\w+\b", re.I),
@@ -194,6 +231,21 @@ RULES: list = [
     # ---- Display / show a literal quoted text -----------------------------
     (re.compile(r"\b(?:displays?|shows?|reads?|says?)\s+['\"]([^'\"]{2,80})['\"]", re.I),
      _r_assert_text, "assert-text"),
+
+    # ---- Legacy sheet shapes -------------------------------------------
+    # "verify state: Make sure all the details are saved properly"
+    (re.compile(r"^\s*verify\s+state\s*:", re.I), _r_verify_state, "verify-state"),
+    # "<Button> - <description>"  (<=3 words before the dash)
+    (re.compile(r"^\s*([A-Z][\w/]*(?:\s+[A-Z][\w/]*){0,2})\s+-\s+[A-Z].{4,}$"),
+     _r_named_button, "named-button"),
+
+    # ---- Bare arrow-chain segments (must stay last: lowest precedence) ----
+    (re.compile(r"^\s*(" + "|".join(_BARE_BUTTONS) + r")\s*\.?\s*$", re.I),
+     _r_bare_button, "bare-button"),
+    (re.compile(r"^\s*(.{2,40}?)\s+tabs?\s*\.?\s*$", re.I),
+     _r_tab, "bare-tab"),
+    (re.compile(r"^\s*(?:Put|Enter|Set|Type|Input|Give|Provide)\s+(?:the\s+)?(?:value\s+of\s+)?(.{2,48}?)\s*\.?\s*$", re.I),
+     _r_put_field, "put-field"),
 ]
 
 
@@ -208,6 +260,9 @@ def translate_step(prose: str) -> dict:
         return {"action": "todo", "target": "(empty step)"}
     # Strip leading enumeration like "1." / "1)" / "1:" / "-"
     p_norm = re.sub(r"^\s*(?:[\-\*•]|\d+[\.\)\:])\s*", "", p)
+    # "Path: A > B > C" is the sheets' way of writing navigation; the bare
+    # breadcrumb is what navigate-path already understands.
+    p_norm = re.sub(r"^\s*path\s*:\s*", "", p_norm, flags=re.I)
     for rx, builder, label in RULES:
         m = rx.search(p_norm) if label == "db-state" else rx.match(p_norm)
         if m:
@@ -231,6 +286,7 @@ class TestCase:
     steps: list                          # list of action dicts
     expected: str = ""
     notes: str = ""                      # raw prose for the YAML comment
+    lines: list = field(default_factory=list)      # the prose lines, in order
 
 
 def _norm(s) -> str:
@@ -238,15 +294,58 @@ def _norm(s) -> str:
     return str(s).replace("\xa0", " ").strip()
 
 
+_ARROW_SPLIT = re.compile(r"\s*->\s*")
+_PATH_HEAD   = re.compile(r"^\s*path\s*:\s*(.+)$", re.I)
+
+
+def _split_arrow_chain(chunk: str) -> list[str]:
+    """Expand a "Path: A > B > C -> do X -> do Y" cell into separate steps.
+
+    Legacy Celerant test sheets write a whole test on one line: '>' walks the
+    menu, then each '->' is the next thing the tester does. Left whole it
+    matches no rule and lands as a single unusable todo, which is most of what
+    the 8% translation rate on these files actually was. Splitting first lets
+    every segment hit the normal rules; the breadcrumb head keeps its '>' so
+    _r_navigate still resolves it to the destination screen."""
+    if "->" not in chunk:
+        return [chunk]
+    parts = [p.strip() for p in _ARROW_SPLIT.split(chunk) if p.strip()]
+    if len(parts) < 2:
+        return [chunk]
+    head, rest = parts[0], parts[1:]
+    m = _PATH_HEAD.match(head)
+    if m:
+        head = "Go to " + m.group(1).strip()
+    return [head] + rest
+
+
 def _split_steps(text: str) -> list[str]:
     """Split a Steps cell into individual numbered/bulleted lines."""
+    return [s for s, _ in _split_steps_src(text)]
+
+
+def _split_steps_src(text: str) -> list[tuple]:
+    """Same split, but each step carries the index of the prose line it came from.
+
+    Provenance is what lets the editor group steps under the sentence the tester
+    actually wrote, and — more importantly — show a line that produced NO steps.
+    A silently dropped requirement is invisible in any layout that only lists
+    what was produced.
+    """
+    if not text: return []
+    lines = _source_lines(text)
+    out = []
+    for idx, line in enumerate(lines):
+        for piece in _split_arrow_chain(line):
+            out.append((piece, idx))
+    return out
+
+
+def _source_lines(text: str) -> list[str]:
+    """The prose lines of a cell, as the tester wrote them."""
     if not text: return []
     raw = re.split(r"(?:\r?\n)+|(?<=[\.\)])\s+(?=\d+[\.\)])", str(text))
-    out = []
-    for chunk in raw:
-        c = chunk.strip()
-        if c: out.append(c)
-    return out
+    return [c.strip() for c in raw if c.strip()]
 
 
 def _detect_layout(rows: list[list[str]]) -> tuple[str, int]:
@@ -283,8 +382,17 @@ def _index_columns(header_row: list[str]) -> dict:
 
 
 def _parse_flat(rows, cols, header_idx) -> list[TestCase]:
-    """One row = one test."""
-    cases = []
+    """Rows grouped under their Test Scenario.
+
+    A blank scenario cell means "still the scenario above" — these sheets write
+    one scenario and then continue its steps down the following rows. Treating
+    every row as its own test shattered the file: the Services sheet has 34 test
+    cases across 221 rows, but row-per-test turned that into 171 "scenarios",
+    most holding a single step, with headings like "Buttons" promoted to test
+    names. Carrying the last name forward keeps a scenario whole and puts its
+    steps inside it, which is what the sheet actually says.
+    """
+    cases: list[TestCase] = []
     for r in rows[header_idx + 1:]:
         scenario = _norm(r[cols["scenario"]]) if "scenario" in cols and cols["scenario"] < len(r) else ""
         steps_text = _norm(r[cols["steps"]])  if "steps"    in cols and cols["steps"]    < len(r) else ""
@@ -293,14 +401,56 @@ def _parse_flat(rows, cols, header_idx) -> list[TestCase]:
         # Skip preamble rows like "Author: X" or "Prerequisite: ..."
         if scenario.lower().startswith(("author:", "prerequisite", "prerequesite", "note:")):
             continue
-        name = scenario or steps_text[:60] or f"test {len(cases)+1}"
-        cases.append(TestCase(
-            name=name,
-            steps=[translate_step(s) for s in _split_steps(steps_text)] +
-                  [translate_step(e) for e in _split_steps(expected)],
-            expected=expected,
-            notes=steps_text,
-        ))
+
+        # Steps keep the index of the prose line they came from. Expected-result
+        # lines continue the same numbering so both halves of the row are
+        # addressable from one list.
+        lines = _source_lines(steps_text)
+        exp_lines = _source_lines(expected)
+        steps = []
+        for txt, si in _split_steps_src(steps_text):
+            st = translate_step(txt); st["_src"] = si; st["_origin"] = "sheet"
+            steps.append(st)
+        for txt, si in _split_steps_src(expected):
+            st = translate_step(txt); st["_src"] = len(lines) + si; st["_origin"] = "expected"
+            steps.append(st)
+        all_lines = lines + exp_lines
+
+        # A sheet with a "TEST CASE"/"TC No" column numbers its cases, and that
+        # number is the real boundary: the Services sheet has 34 numbered cases
+        # but 44 rows carrying a FEATURE name, because one case spans several
+        # feature lines. Where a number exists it wins; otherwise fall back to
+        # "a new name starts a new case".
+        num = _norm(r[cols["num"]]) if "num" in cols and cols["num"] < len(r) else ""
+        starts_new = bool(num) if "num" in cols else bool(scenario)
+
+        if starts_new or not cases:
+            cases.append(TestCase(
+                name=scenario or steps_text[:60] or f"test {num or len(cases)+1}",
+                steps=steps,
+                expected=expected,
+                notes=steps_text,
+                lines=all_lines,
+            ))
+        else:
+            tc = cases[-1]
+            # A continuation row may still name a sub-feature; keep it as a step
+            # label so the detail is not lost when the rows are merged.
+            base = len(tc.lines)
+            if scenario and scenario not in (tc.name or ""):
+                steps = [{"action": "todo", "target": scenario,
+                          "_src": base, "_origin": "sheet"}] + steps
+                all_lines = [scenario] + all_lines
+                for s in steps[1:]:
+                    s["_src"] = s.get("_src", 0) + 1
+            for s in steps:
+                s["_src"] = s.get("_src", 0) + base
+            tc.lines.extend(all_lines)
+            tc.steps.extend(steps)
+            if expected:
+                tc.expected = (tc.expected + "\n" + expected).strip() if tc.expected else expected
+            if steps_text:
+                tc.notes = (tc.notes + "\n" + steps_text).strip() if tc.notes else steps_text
     return cases
 
 
@@ -426,6 +576,106 @@ def _parse_template(rows: list, header_idx: int) -> dict:
     return grouped
 
 
+
+# ============================================ inventory -> presence checks
+
+_HEADING = re.compile(
+    r"^\s*(?:buttons?|fields?|grid|grids?\s+results?|search\s+(?:criteria|components?)"
+    r"|navigation\s+buttons?|columns?|bottom\s+(?:section|information)"
+    r"|top\s+section|customer\s+info|deal\s+grid(?:\s+buttons?)?"
+    r"|components?|tabs?|menu\s+options?)\s*:?\s*$", re.I)
+
+_VERBY = re.compile(
+    r"^\s*(?:click|select|choose|enter|put|type|set|open|go|search|save|add|check|"
+    r"verify|scan|create|edit|delete|update|close|print|apply|enable|disable|"
+    r"login|navigate|press|tap|fill|remove|view)\b", re.I)
+
+_BREADCRUMBISH = re.compile(r"(?:>>|->|\s>\s|→)")
+
+
+def _infer_inventory_checks(steps: list) -> int:
+    """Turn a screen's component list into presence assertions.
+
+    These sheets document a screen by listing what it contains:
+
+        Search Components:      <- heading
+          Deal Number           <- element
+          Store
+          Payout Method
+
+    Those rows are not instructions, which is why they arrive as `todo` and get
+    raised as questions the tester cannot meaningfully answer. But the list IS
+    testable: every named element should be on screen. Converting each to
+    assert_visible turns a wall of questions into real automated checks.
+
+    Only rows directly under a heading are converted, and only short noun
+    phrases — anything with a verb, a breadcrumb, or sentence length is left
+    alone so genuine steps and prose are never rewritten.
+    """
+    changed, in_list = 0, False
+    for st in steps:
+        if (st.get("action") or "") != "todo":
+            in_list = False
+            continue
+        text = (st.get("target") or "").strip()
+        if not text:
+            continue
+        if _HEADING.match(text):
+            in_list = True
+            continue
+        if not in_list:
+            continue
+        if (len(text) > 40 or _VERBY.match(text) or _BREADCRUMBISH.search(text)
+                or text.endswith((".", ";", ":"))):
+            in_list = False
+            continue
+        st["action"] = "assert_visible"
+        st["target"] = text
+        changed += 1
+    return changed
+
+
+
+_CONTROLish = re.compile(r"^[A-Z][A-Za-z0-9]*(?:[ /&\-][A-Za-z0-9()][A-Za-z0-9()]*){0,3}$")
+_NOISE      = re.compile(r"[=:;\.]|\bnote\b", re.I)
+
+
+def _infer_repeated_controls(steps: list, min_repeats: int = 2) -> int:
+    """Treat a short name that recurs across the sheet as a control to click.
+
+    In a services/POS walkthrough the same names come back page after page —
+    "New Deal" x8, "Services Main Menu" x7, "Close Cash Drawer" x3. A phrase
+    that short, that title-cased, repeating that often is a button or menu item
+    being pressed, not prose.
+
+    This is the one inference here that is a genuine guess, so it is deliberately
+    narrow: Title Case, at most four words, no punctuation, and it must recur.
+    A wrong click fails loudly in the report and is one dropdown away from being
+    corrected in the editor, which beats asking the tester a question they
+    cannot answer about a word with no context.
+    """
+    counts: dict = {}
+    for st in steps:
+        if (st.get("action") or "") != "todo":
+            continue
+        t = (st.get("target") or "").strip()
+        # A section heading repeats too, but clicking "Buttons" is meaningless.
+        if (2 <= len(t) <= 30 and _CONTROLish.match(t)
+                and not _NOISE.search(t) and not _HEADING.match(t)):
+            counts[t] = counts.get(t, 0) + 1
+    repeated = {t for t, n in counts.items() if n >= min_repeats}
+    changed = 0
+    for st in steps:
+        if (st.get("action") or "") != "todo":
+            continue
+        t = (st.get("target") or "").strip()
+        if t in repeated:
+            st["action"] = "click"
+            st["target"] = t
+            changed += 1
+    return changed
+
+
 def _render_yaml(doc: dict, comment_header: str) -> str:
     import yaml
     body = yaml.safe_dump(doc, sort_keys=False, default_flow_style=False,
@@ -448,7 +698,42 @@ class ImportResult:
     screens: list | None = None       # ordered list of screens covered
 
 
-def import_xlsx(file_bytes: bytes, screen: str = "yourscreen") -> ImportResult:
+def list_sheets(file_bytes: bytes) -> list[dict]:
+    """Sheet names with a rough size, so the UI can offer a real choice."""
+    import openpyxl, io
+    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+    out = []
+    for ws in wb.worksheets:
+        rows = [[c.value for c in row] for row in ws.iter_rows()]
+        while rows and not any(_norm(c) for c in rows[-1]):
+            rows.pop()
+        header = ""
+        for r in rows[:8]:
+            j = " ".join(_norm(c).lower() for c in r)
+            if "step" in j or "scenario" in j or "feature" in j:
+                header = " | ".join(_norm(c) for c in r if _norm(c))[:90]
+                break
+        out.append({"name": ws.title, "rows": max(0, len(rows) - 1),
+                    "looks_like_tests": bool(header), "header": header})
+    return out
+
+
+def _pick_sheet(wb, sheet: str | None):
+    """The named sheet, else the first that looks like test cases, else active."""
+    if sheet:
+        for ws in wb.worksheets:
+            if ws.title == sheet:
+                return ws
+    for ws in wb.worksheets:
+        for row in ws.iter_rows(min_row=1, max_row=8, values_only=True):
+            j = " ".join(_norm(c).lower() for c in row)
+            if ("step" in j and ("scenario" in j or "feature" in j or "test case" in j)):
+                return ws
+    return wb.active
+
+
+def import_xlsx(file_bytes: bytes, screen: str = "yourscreen",
+                sheet: str | None = None) -> ImportResult:
     """Parse an uploaded .xlsx into TestCases + render to YAML.
 
     Two paths:
@@ -530,7 +815,10 @@ def import_xlsx(file_bytes: bytes, screen: str = "yourscreen") -> ImportResult:
         )
 
     # ---------- LEGACY auto-translation ----------
-    ws = wb.active
+    # wb.active is whichever tab Excel happened to have open when the file was
+    # saved — for this workbook that was "Test Cases Services", so the sheet the
+    # tester was actually looking at never got imported. Choose explicitly.
+    ws = _pick_sheet(wb, sheet)
     rows = [[cell.value for cell in row] for row in ws.iter_rows()]
     while rows and not any(_norm(c) for c in rows[-1]): rows.pop()
     if not rows:
@@ -542,6 +830,16 @@ def import_xlsx(file_bytes: bytes, screen: str = "yourscreen") -> ImportResult:
         layout = "grouped"; cases = _parse_grouped(rows, cols, header_idx)
     else:
         cases = _parse_flat(rows, cols, header_idx)
+
+    # A screen's component list is documentation, but every element in it should
+    # be on screen — so it converts to real assertions instead of questions.
+    # These sheets put one row per line, so a heading and the elements under it
+    # land in DIFFERENT cases (132 of 171 cases here hold a single step). The
+    # grouping only survives in sheet order, so the pass runs across the whole
+    # ordered sequence rather than inside each case.
+    _flat = [st for c in cases for st in c.steps]
+    _infer_inventory_checks(_flat)
+    _infer_repeated_controls(_flat)
 
     doc = {"tests": [
         {"screen": screen,
