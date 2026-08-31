@@ -141,6 +141,42 @@
       <div style="margin-left:auto;display:flex;gap:7px" id="chips"></div>
     </div>
 
+    <div class="conn" id="conn">
+      <div class="connhead">
+        <span><i class="ti ti-server-2"></i> &nbsp;Where should this run?</span>
+        <span class="connstate"><span class="dot" id="conndot"></span><span id="connstate">not checked yet</span></span>
+      </div>
+      <div class="connbody">
+        <div class="connrow">
+          <div class="cf wide">
+            <label class="cl" for="cnUrl">BackOffice address</label>
+            <input class="inp" id="cnUrl" type="url" spellcheck="false" autocomplete="off"
+                   placeholder="https://your-server:8443/backoffice/">
+          </div>
+          <div class="cf">
+            <label class="cl" for="cnMachine">Machine ID <span class="opt">(optional)</span></label>
+            <input class="inp" id="cnMachine" spellcheck="false" autocomplete="off" placeholder="100">
+          </div>
+        </div>
+        <div class="connrow">
+          <div class="cf">
+            <label class="cl" for="cnUser">Username</label>
+            <input class="inp" id="cnUser" spellcheck="false" autocomplete="off" placeholder="BackOffice login">
+          </div>
+          <div class="cf">
+            <label class="cl" for="cnPass">Password</label>
+            <input class="inp" id="cnPass" type="password" autocomplete="new-password" placeholder="••••••••">
+          </div>
+          <div class="cf shrink">
+            <label class="cl">&nbsp;</label>
+            <button class="abtn" id="cntest" type="button">Test connection</button>
+          </div>
+        </div>
+        <p class="connnote"><i class="ti ti-lock"></i> Used for this run only. Not saved to disk, and not kept once you close the page.</p>
+      </div>
+    </div>
+
+
     <div class="orient" id="orient">
       <p>We read every line and turned the ones that describe an action into things a
          browser can do &mdash; clicking, typing, and checking that something is on screen.
@@ -164,6 +200,8 @@
       </div>
       <label class="chk"><input type="checkbox" id="onlyneeds"> Only show what needs input</label>
       <span class="edspacer"></span>
+      <button class="abtn" id="pickall" type="button">Select all</button>
+      <button class="abtn" id="picknone" type="button">Select none</button>
       <button class="abtn" id="expandall" type="button">Expand all</button>
       <button class="abtn" id="collapseall" type="button">Collapse all</button>
     </div>
@@ -200,41 +238,6 @@
       <div class="technote">Most testers never open this. It's here for developers, or when you want to fine-tune something by hand — your edits are checked before saving, and you can always undo.</div>
     </div>
 
-    <div class="conn" id="conn">
-      <div class="connhead">
-        <span><i class="ti ti-server-2"></i> &nbsp;Where should this run?</span>
-        <span class="connstate"><span class="dot" id="conndot"></span><span id="connstate">not checked yet</span></span>
-      </div>
-      <div class="connbody">
-        <div class="connrow">
-          <div class="cf wide">
-            <label class="cl" for="cnUrl">BackOffice address</label>
-            <input class="inp" id="cnUrl" type="url" spellcheck="false" autocomplete="off"
-                   placeholder="https://your-server:8443/backoffice/">
-          </div>
-          <div class="cf">
-            <label class="cl" for="cnMachine">Machine ID <span class="opt">(optional)</span></label>
-            <input class="inp" id="cnMachine" spellcheck="false" autocomplete="off" placeholder="100">
-          </div>
-        </div>
-        <div class="connrow">
-          <div class="cf">
-            <label class="cl" for="cnUser">Username</label>
-            <input class="inp" id="cnUser" spellcheck="false" autocomplete="off" placeholder="BackOffice login">
-          </div>
-          <div class="cf">
-            <label class="cl" for="cnPass">Password</label>
-            <input class="inp" id="cnPass" type="password" autocomplete="new-password" placeholder="••••••••">
-          </div>
-          <div class="cf shrink">
-            <label class="cl">&nbsp;</label>
-            <button class="abtn" id="cntest" type="button">Test connection</button>
-          </div>
-        </div>
-        <p class="connnote"><i class="ti ti-lock"></i> Used for this run only. Not saved to disk, and not kept once you close the page.</p>
-      </div>
-    </div>
-
     <div class="actions">
       <button class="abtn primary" id="runbtn"><i class="ti ti-player-play"></i> Run the test now</button>
       <button class="abtn" id="savebtn">Save to my library</button>
@@ -258,7 +261,32 @@
 </div><!-- /wf -->
 </div>
 
+<div class="modal hidden" id="askconn">
+  <div class="modalbox">
+    <div class="modaltitle">Where should this run?</div>
+    <p class="modalsub">Fill these in and we&rsquo;ll check this scenario against your server.
+       They are used for this run only and are not saved to disk.</p>
+    <label class="cl" for="mkUrl">BackOffice address</label>
+    <input class="inp" id="mkUrl" type="url" spellcheck="false" autocomplete="off"
+           placeholder="https://your-server:8443/backoffice/">
+    <div class="modalrow">
+      <div><label class="cl" for="mkUser">Username</label>
+        <input class="inp" id="mkUser" spellcheck="false" autocomplete="off" placeholder="BackOffice login"></div>
+      <div><label class="cl" for="mkPass">Password</label>
+        <input class="inp" id="mkPass" type="password" autocomplete="new-password" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;"></div>
+      <div class="narrow"><label class="cl" for="mkMachine">Machine ID</label>
+        <input class="inp" id="mkMachine" spellcheck="false" autocomplete="off" placeholder="100"></div>
+    </div>
+    <div class="modalbtns">
+      <button class="abtn primary" id="mkGo" type="button">Check this scenario</button>
+      <button class="abtn" id="mkCancel" type="button">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
+<script src="{{ url_for('static', filename='vendor/motion.js') }}?v={{ asset_v('vendor/motion.js') }}"></script>
+<script src="{{ url_for('static', filename='motion-ui.js') }}?v={{ asset_v('motion-ui.js') }}"></script>
 <script src="{{ url_for('static', filename='convert.js') }}?v={{ asset_v('convert.js') }}"></script>
 </body>
 </html>

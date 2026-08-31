@@ -68,6 +68,35 @@ body{background:var(--bg);color:var(--fg-2);font-family:var(--ui);
 .sc-head:hover{background:var(--panel-2)}
 .caret{color:var(--fg-4);font-size:14px;flex:none;transition:transform .16s ease}
 .scen.open .caret{transform:rotate(90deg)}
+
+/* ---- reorder grip --------------------------------------------------------
+   The grip lives inside .sc-head, which toggles the card open on click, so it
+   stops its own pointer events from being read as a header click (handled in
+   convert.js). touch-action:none keeps a touch-drag from scrolling the page. */
+.scgrip{display:inline-flex;align-items:center;justify-content:center;
+        width:20px;height:24px;margin:-2px -4px -2px -5px;flex:none;
+        color:var(--fg-4);font-size:15px;cursor:grab;border-radius:var(--radius-sm);
+        touch-action:none;opacity:.45;
+        transition:opacity .12s ease,background .12s ease,color .12s ease}
+.scen:hover .scgrip{opacity:1}
+.scgrip:hover{background:var(--panel-3);color:var(--fg-2)}
+.scgrip:focus-visible{outline:2px solid var(--accent);outline-offset:1px;opacity:1}
+.scgrip:active{cursor:grabbing}
+
+/* The card being dragged floats above the others and ignores hit-testing so
+   the cards underneath can be measured against the pointer. */
+.scen.dragging{position:relative;z-index:30;cursor:grabbing;
+               box-shadow:var(--shadow-md);border-color:var(--accent);
+               will-change:transform}
+.scen.dragging .scgrip{opacity:1;cursor:grabbing}
+
+/* While a drag is running, nothing else on the page should select or hover. */
+body.scen-dragging{user-select:none;-webkit-user-select:none;cursor:grabbing}
+/* Neighbours are moved by Motion (FLIP), so no CSS transition here — the two
+   would fight and the cards would drift. */
+body.scen-dragging .sc-head:hover{background:none}
+
+@media (hover:none){ .scgrip{opacity:1} }
 .sc-name{font-family:var(--ui);font-size:13.5px;font-weight:550;color:var(--fg);
          letter-spacing:-.011em;line-height:1.45}
 .sc-meta{display:flex;align-items:center;gap:7px;margin-top:3px;
@@ -288,3 +317,65 @@ body{background:var(--bg);color:var(--fg-2);font-family:var(--ui);
 }
 /* cancel the toolbar gap between the two view buttons so they read as one control */
 .edtools #collapseall{margin-left:-12px}
+
+/* ── choosing which scenarios to run ──────────────────────────────────────
+   Unticked scenarios stay fully visible and editable — they are simply left
+   out of the run. Dimming them would read as disabled. */
+.scpick-wrap{display:inline-flex;align-items:center;padding:4px;margin:-4px 0 -4px -4px;
+             border-radius:6px;cursor:pointer;flex:none}
+.scpick-wrap:hover{background:var(--panel-3)}
+.scpick{accent-color:var(--accent);margin:0;cursor:pointer;width:15px;height:15px}
+.scen.unpicked{border-style:dashed}
+.scen.unpicked .sc-name{color:var(--fg-3)}
+.scen.unpicked .sc-meta{color:var(--fg-4)}
+
+/* the two selection buttons pair up like the view controls */
+.edtools #pickall{border-radius:var(--radius-sm) 0 0 var(--radius-sm);margin-right:-1px}
+.edtools #picknone{border-radius:0 var(--radius-sm) var(--radius-sm) 0;margin-left:-12px}
+.edtools #expandall{margin-left:0}
+
+/* ── connection block, now at the top ─────────────────────────────────────
+   It answers "where will this run?" before the tester reads a single step,
+   which is the order the question actually arises. */
+.conn{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+      box-shadow:var(--shadow-xs);margin:0 0 22px;overflow:hidden}
+.connhead{display:flex;justify-content:space-between;align-items:center;
+          padding:11px 15px;border-bottom:1px solid var(--border);
+          font-family:var(--ui);font-size:13px;font-weight:550;color:var(--fg);
+          letter-spacing:-.009em;background:var(--panel-2)}
+.connbody{padding:14px 15px}
+.connnote{font-family:var(--ui);font-size:12px;color:var(--fg-3);margin:10px 0 0}
+.cl{font-family:var(--ui);font-size:11.5px;font-weight:500;color:var(--fg-3);
+    letter-spacing:.01em}
+
+/* ── Validate ─────────────────────────────────────────────────────────── */
+.valbtn{font-family:var(--ui);font-size:12px;font-weight:500;padding:5px 11px;
+        border-radius:var(--radius-sm);cursor:pointer;flex:none;
+        border:1px solid var(--accent-border);background:var(--accent-soft);
+        color:var(--accent);transition:background .12s ease}
+.valbtn:hover{background:#E7E7FC;border-color:var(--accent)}
+.valbtn[disabled]{opacity:.6;cursor:progress}
+
+/* ── ask-for-details popup ────────────────────────────────────────────── */
+.modal{position:fixed;inset:0;z-index:200;background:rgba(9,9,11,.42);
+       display:flex;align-items:center;justify-content:center;padding:24px}
+.modal.hidden{display:none}
+.modalbox{background:var(--panel);border-radius:12px;box-shadow:0 18px 48px rgba(9,9,11,.24);
+          width:100%;max-width:560px;padding:22px 24px 20px}
+.modaltitle{font-family:var(--ui);font-size:16px;font-weight:600;color:var(--fg);
+            letter-spacing:-.012em;margin-bottom:5px}
+.modalsub{font-family:var(--ui);font-size:12.5px;color:var(--fg-3);line-height:1.6;
+          margin:0 0 16px;max-width:62ch}
+.modalbox .inp{width:100%;font-family:var(--ui);font-size:13px;padding:8px 11px;
+               border:1px solid var(--border-2);border-radius:var(--radius-sm);
+               background:var(--panel);color:var(--fg);margin:4px 0 12px}
+.modalbox .inp:focus{outline:none;border-color:var(--accent);
+                     box-shadow:0 0 0 3px var(--accent-soft)}
+.modalrow{display:grid;grid-template-columns:1fr 1fr 110px;gap:12px}
+.modalbtns{display:flex;gap:9px;margin-top:6px}
+.modalbtns .abtn{font-family:var(--ui);font-size:13px;padding:8px 16px;
+                 border-radius:var(--radius-sm);cursor:pointer;
+                 border:1px solid var(--border-2);background:var(--panel);color:var(--fg)}
+.modalbtns .abtn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.modalbtns .abtn.primary:hover{background:var(--accent-hover)}
+@media (max-width:620px){ .modalrow{grid-template-columns:1fr} }

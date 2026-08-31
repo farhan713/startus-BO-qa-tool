@@ -148,13 +148,9 @@ def _gemini_parse(prompt: str) -> dict:
     Returns a dict (possibly empty if Gemini couldn't determine anything).
     Never raises — translation errors are returned as `{"_error": "..."}`.
     """
-    if not os.environ.get("GEMINI_API_KEY"):
-        return {"_error": "GEMINI_API_KEY not set"}
-    try:
-        from google import genai
-        from google.genai.errors import APIError
-    except Exception as e:
-        return {"_error": f"google-genai not installed: {e}"}
+    from framework import llm
+    if not llm.available():
+        return {"_error": "no language model is configured"}
 
     scenarios = scenario_store.list_scenarios()
     directory = scenario_store.load_directory()
@@ -189,20 +185,16 @@ def _gemini_parse(prompt: str) -> dict:
         f"=== USER REQUEST ===\n{prompt}\n"
     )
     try:
-        client = genai.Client()
-        r = client.models.generate_content(
-            model=os.environ.get("GEMINI_MODEL") or "gemini-flash-latest",
-            contents=instructions)
-        text = (r.text or "").strip()
+        text = llm.complete(instructions)
         text = re.sub(r"^```(?:json)?\s*", "", text)
         text = re.sub(r"\s*```\s*$", "", text)
         return json.loads(text)
-    except APIError as e:
-        return {"_error": f"gemini api: {e}"}
+    except llm.LLMError as e:
+        return {"_error": f"model call failed: {e}"}
     except json.JSONDecodeError as e:
-        return {"_error": f"gemini returned non-JSON: {e}"}
+        return {"_error": f"model returned non-JSON: {e}"}
     except Exception as e:
-        return {"_error": f"gemini call failed: {e}"}
+        return {"_error": f"model call failed: {e}"}
 
 
 def parse_intent(prompt: str, use_llm: bool = True) -> LaunchIntent:

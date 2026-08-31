@@ -51,11 +51,14 @@ function toast(msg){
   var t = $("toast");
   t.textContent = msg;
   t.classList.add("show");
+  MotionUI.toast(true);
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(function(){ t.classList.remove("show"); }, 2800);
+  toastTimer = setTimeout(function(){
+    t.classList.remove("show"); MotionUI.toast(false); }, 2800);
 }
 
-function fail(html){ $("errbox").innerHTML = html; $("errbox").classList.add("show"); }
+function fail(html){
+  $("errbox").innerHTML = html; $("errbox").classList.add("show"); MotionUI.fail(); }
 function clearFail(){ $("errbox").classList.remove("show"); $("errbox").innerHTML = ""; }
 
 function esc(s){
@@ -180,6 +183,7 @@ function showState(which){
   showEl($("stateA"), which === "A");
   showEl($("stateB"), which === "B");
   showEl($("stateC"), which === "C");
+  MotionUI.state(which);
 }
 
 // ------------------------------------------------------------------ input methods
@@ -387,7 +391,9 @@ function progress(step, pct, text){
                                       : n === step ? '<i class="ti ti-loader-2"></i>'
                                       : '<i class="ti ti-point"></i>';
   });
-  $("bar").style.width = pct + "%";
+  /* Motion springs the bar when it is available; the direct write is the
+     fallback for reduced-motion and for a missing bundle. */
+  if (!MotionUI.progress(step, pct)) $("bar").style.width = pct + "%";
   if (text) $("ptext").textContent = text;
 }
 function detail(n, text){
@@ -1042,8 +1048,16 @@ function edCard(sc){
   var pre = sc.steps.filter(function(s){
     return s.action==="todo" && (s.kind==="setup_db" || s.kind==="setup_sec"); });
   return '<div class="scen'+(sc.reviewed?" done":"")+(sc.open?" open":"")+
-         '" data-sc="'+sc.id+'">'+
+         (sc.selected===false?" unpicked":"")+'" data-sc="'+sc.id+'">'+
     '<div class="sc-head">'+
+      '<span class="scgrip" tabindex="0" role="button" '+
+        'aria-label="Reorder this scenario. Drag, or hold Alt and press the up and down arrows." '+
+        'title="Drag to reorder — or Alt + \u2191 / \u2193">'+
+        '<i class="ti ti-grip-vertical"></i>'+
+      '</span>'+
+      '<label class="scpick-wrap" title="Include this scenario in the run">'+
+        '<input type="checkbox" class="scpick"'+(sc.selected===false?"":" checked")+'>'+
+      '</label>'+
       '<i class="ti ti-chevron-right caret"></i>'+
       '<div class="sc-main">'+
         '<div class="sc-name">'+esc(sc.name)+'</div>'+
@@ -1054,6 +1068,8 @@ function edCard(sc){
           (sc.screen ? '<span class="sc-count">· '+esc(sc.screen)+'</span>' : '')+
         '</div>'+
       '</div>'+
+      '<button class="valbtn" type="button" data-val="'+sc.id+'" '+
+        'title="Run just this scenario against your server">Validate</button>'+
       '<button class="okbtn" type="button" data-ok="'+sc.id+'">Looks right</button>'+
     '</div>'+
     '<div class="steps'+(sc.open?"":" hidden")+'">'+
@@ -1264,6 +1280,7 @@ function edCardRefresh(sc){
   tmp.innerHTML = edCard(sc);
   var fresh = tmp.firstElementChild;
   old.replaceWith(fresh);
+  MotionUI.card(fresh);
 
   openDetails.forEach(function(cls){
     var d = fresh.querySelector("details." + cls.split(" ")[0]);
@@ -1294,12 +1311,14 @@ function edRender(){
   });
   $("list").innerHTML = vis.length ? vis.map(edCard).join("")
                                    : '<div class="empty">Nothing matches that filter.</div>';
+  MotionUI.list();
 }
 
 function edCounts(){
+  var sel = edSelected();
   var ready=0, questions=0, notes=0;
-  ED.scenarios.forEach(function(sc){
-    sc.steps.forEach(function(s){ if (s.action !== "todo") ready++; });
+  sel.forEach(function(sc){
+    sc.steps.forEach(function(st){ if (st.action !== "todo") ready++; });
     (sc.lines || []).forEach(function(l){
       if (l.kind === "question" && l.answer == null) questions++;
       else if (l.kind === "note" || l.kind === "heading" || l.kind === "setup") notes++;
@@ -1307,14 +1326,16 @@ function edCounts(){
   });
   ED.questions = questions;
 
+  var all = ED.scenarios.length, n = sel.length;
   $("verdicttxt").textContent = "Check the test we built from your test case";
-  $("verdictsub").textContent = questions
-    ? ready + " steps ready · " + questions + " question" + (questions===1?"":"s") +
-      " for you · " + notes + " lines kept as notes"
-    : ready + " steps ready · nothing needs you here · " + notes + " lines kept as notes";
+  $("verdictsub").textContent =
+    (n === all ? all + " scenario" + (all===1?"":"s")
+               : n + " of " + all + " scenarios selected") +
+    " · " + ready + " steps ready" +
+    (questions ? " · " + questions + " question" + (questions===1?"":"s") + " for you"
+               : " · nothing needs you here") +
+    " · " + notes + " lines kept as notes";
 
-  /* A count of questions is a promise the tester can verify. A percentage of a
-     denominator she does not understand is noise, so there is no progress bar. */
   $("chips").innerHTML = questions
     ? '<button type="button" class="nextq" id="nextq">Answer the next question</button>'
     : '<span class="alldone">Nothing left to answer.</span>';
@@ -1326,6 +1347,13 @@ function edChipBtn(key, n, label, cls){
   if (!n) return "";
   return '<button type="button" class="chip '+cls+(ED.filter===key?" on":"")+
          '" data-filter="'+key+'">'+esc(label)+'</button>';
+}
+
+/* Scenarios the tester has ticked. Everything downstream — the test file, the
+   Done handoff, the counters — runs off this, so unticking a scenario keeps it
+   on screen for editing but leaves it out of the run. */
+function edSelected(){
+  return ED.scenarios.filter(function(sc){ return sc.selected !== false; });
 }
 
 /* The whole test file, rebuilt from the edited scenarios.
@@ -1340,7 +1368,7 @@ function edFileYaml(){
   edYamlT = setTimeout(function(){
     fetch("/api/structured-to-yaml", {
       method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({scenarios: ED.scenarios})
+      body: JSON.stringify({scenarios: edSelected()})
     })
     .then(function(r){ return r.json(); })
     .then(function(d){
@@ -1370,13 +1398,32 @@ function edFind(scId, stId){
 document.addEventListener("click", function(e){
   if (!e.target.closest("#list")) return;
 
+  var pick = e.target.closest(".scpick");
+  if (pick){
+    var pc = pick.closest(".scen");
+    var scP = ED.scenarios.find(function(x){ return x.id === pc.dataset.sc; });
+    if (scP){
+      scP.selected = pick.checked;
+      pc.classList.toggle("unpicked", !pick.checked);
+      edCounts();
+    }
+    return;                       // never let this toggle the card open
+  }
+
   var head = e.target.closest(".sc-head");
-  if (head && !e.target.closest("[data-ok]")){
+  /* Controls that live in the header act on the scenario, not on its
+     open/closed state. stopPropagation cannot help here — both handlers are on
+     document, so the earlier one has already run by then. */
+  if (head && !e.target.closest("[data-ok]") && !e.target.closest("[data-val]")
+           && !e.target.closest(".scpick-wrap") && !e.target.closest(".scgrip")){
     var card = head.closest(".scen");
     var scT  = ED.scenarios.find(function(x){ return x.id === card.dataset.sc; });
     if (scT) scT.open = !scT.open;
     card.classList.toggle("open");
-    card.querySelector(".steps").classList.toggle("hidden");
+    /* MotionUI.expand animates the height and reports that it handled the
+       visibility; without it we fall back to the instant class toggle. */
+    if (!MotionUI.expand(card, card.classList.contains("open")))
+      card.querySelector(".steps").classList.toggle("hidden");
     return;
   }
 
@@ -1453,7 +1500,11 @@ document.addEventListener("click", function(e){
           });
         }
         sca.open = true;
-        edCardRefresh(sca); edCounts();
+        /* Let the answered question collapse away before the card is rebuilt,
+           so the tester sees which one they just cleared. */
+        MotionUI.answered(ans.closest(".ln") || ans.closest(".qcard2"), function(){
+          edCardRefresh(sca); edCounts();
+        });
       }
     }
     return;
@@ -1472,7 +1523,10 @@ document.addEventListener("click", function(e){
   var ok = e.target.closest("[data-ok]");
   if (ok){
     var s3 = ED.scenarios.find(function(x){ return x.id === ok.dataset.ok; });
-    if (s3){ s3.reviewed = !s3.reviewed; edCardRefresh(s3); edCounts(); }
+    if (s3){
+      s3.reviewed = !s3.reviewed; edCardRefresh(s3); edCounts();
+      MotionUI.approve(document.querySelector('.scen[data-sc="'+s3.id+'"]'));
+    }
     return;
   }
 });
@@ -1541,7 +1595,7 @@ $("donebtn").addEventListener("click", function(){
   btn.disabled = true; btn.textContent = "Saving\u2026";
   fetch("/api/structured-to-yaml", {
     method:"POST", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({scenarios: ED.scenarios})
+    body: JSON.stringify({scenarios: edSelected()})
   })
   .then(function(r){ return r.json(); })
   .then(function(d){
@@ -1611,6 +1665,7 @@ document.addEventListener("click", function(e){
   scen.classList.add("open");
   scen.querySelector(".steps").classList.remove("hidden");
   card.scrollIntoView({block:"center", behavior:"smooth"});
+  MotionUI.spotlight(card);
   var b = card.querySelector(".qb");
   if (b) b.focus();
 });
@@ -1723,4 +1778,244 @@ document.addEventListener("click", function(e){
   ln3.answer = picked.value === "none" ? "note" : "told";
   edCardRefresh(sc3); edCounts();
 });
+
+document.addEventListener("click", function(e){
+  var b = e.target.closest("#pickall, #picknone");
+  if (!b) return;
+  var on = b.id === "pickall";
+  ED.scenarios.forEach(function(sc){ sc.selected = on; });
+  edRender(); edCounts();
+});
+
+/* ── Validate one scenario ────────────────────────────────────────────────
+   Runs a single scenario against the server so a tester can check one thing
+   without waiting for the whole file. If the connection details at the top are
+   empty we ask for them here rather than scrolling the tester away and losing
+   their place — what they type is copied into the main form so they are only
+   ever asked once. */
+var VAL_PENDING = null;
+
+function connFilled(){
+  return !!($("cnUrl").value.trim() && $("cnUser").value.trim());
+}
+
+function askConnection(scId){
+  VAL_PENDING = scId;
+  $("mkUrl").value     = $("cnUrl").value;
+  $("mkUser").value    = $("cnUser").value;
+  $("mkPass").value    = $("cnPass").value;
+  $("mkMachine").value = $("cnMachine").value;
+  showEl($("askconn"), true);
+  setTimeout(function(){ ($("mkUrl").value ? $("mkUser") : $("mkUrl")).focus(); }, 30);
+}
+
+function closeAsk(){ showEl($("askconn"), false); VAL_PENDING = null; }
+
+$("mkCancel").addEventListener("click", closeAsk);
+$("askconn").addEventListener("click", function(e){ if (e.target === this) closeAsk(); });
+document.addEventListener("keydown", function(e){
+  if (e.key === "Escape" && !$("askconn").classList.contains("hidden")) closeAsk();
+});
+
+$("mkGo").addEventListener("click", function(){
+  if (!$("mkUrl").value.trim())  { toast("Enter the BackOffice address"); $("mkUrl").focus(); return; }
+  if (!$("mkUser").value.trim()) { toast("Enter the username the test signs in with"); $("mkUser").focus(); return; }
+  /* Copy into the form at the top so the tester is asked once, not per scenario. */
+  $("cnUrl").value     = $("mkUrl").value;
+  $("cnUser").value    = $("mkUser").value;
+  $("cnPass").value    = $("mkPass").value;
+  $("cnMachine").value = $("mkMachine").value;
+  var id = VAL_PENDING;
+  closeAsk();
+  if (id) validateScenario(id);
+});
+
+document.addEventListener("click", function(e){
+  var b = e.target.closest("[data-val]");
+  if (!b) return;
+  e.stopPropagation();                       // never toggle the card
+  if (!connFilled()) { askConnection(b.dataset.val); return; }
+  validateScenario(b.dataset.val);
+});
+
+function validateScenario(scId){
+  var sc = ED.scenarios.find(function(x){ return x.id === scId; });
+  if (!sc) return;
+  var btn = document.querySelector('[data-val="'+scId+'"]');
+  var old = btn ? btn.textContent : "Validate";
+  if (btn){ btn.textContent = "Checking\u2026"; btn.disabled = true; MotionUI.busy(btn, true); }
+
+  fetch("/api/structured-to-yaml", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({scenarios: [sc]})
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(y){
+    var p = connection();
+    return api("/api/run", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        url: p.url, user: p.user || "", password: p.password || "",
+        machine_id: p.machine_id || "",
+        screen: sc.screen || S.screen || "customer",
+        single_mode: true, single_screenname: sc.screen || S.screen || "",
+        single_safe: true, read_only: true,          // validating never changes data
+        custom_tests_yaml: y.yaml || ""
+      })
+    });
+  })
+  .then(function(){
+    if (btn){ btn.textContent = old; btn.disabled = false; MotionUI.busy(btn, false); }
+    toast('Checking "' + (sc.name || "scenario").slice(0, 40) + '" on the server');
+    startLive();
+  })
+  .catch(function(err){
+    if (btn){ btn.textContent = old; btn.disabled = false; MotionUI.busy(btn, false); }
+    if (err && err.needsLogin) { needsLogin("run a test"); return; }
+    toast("Could not start the check: " + ((err && err.message) || "unknown error"));
+  });
+}
+
+/* ------------------------------------------------------------------ reorder
+   Scenarios run in the order they appear, so the tester needs to be able to
+   shuffle them. A dedicated grip is used rather than making the whole header
+   draggable, because the header already toggles the card open on click.
+
+   Pointer events (not HTML5 drag-and-drop) so touch works and so the card can
+   be moved live rather than dropped onto an invisible target. */
+
+var scDrag = null;
+
+function scCards(){
+  return Array.prototype.slice.call(document.querySelectorAll("#list .scen"));
+}
+
+/* Reordering while a filter is on only rearranges what is on screen. The
+   visible scenarios are permuted among the array slots they already occupied,
+   so scenarios hidden by the filter keep their absolute position. */
+function scCommitOrder(){
+  var ids = scCards().map(function(el){ return el.dataset.sc; });
+  if (!ids.length) return;
+
+  var slots = [];
+  ED.scenarios.forEach(function(sc, i){ if (ids.indexOf(sc.id) >= 0) slots.push(i); });
+  if (slots.length !== ids.length) return;      // stale DOM — leave the model alone
+
+  var byId = {};
+  ED.scenarios.forEach(function(sc){ byId[sc.id] = sc; });
+  ids.forEach(function(id, k){
+    if (byId[id]) ED.scenarios[slots[k]] = byId[id];
+  });
+  edCounts();                                   // also refreshes the YAML and saves
+}
+
+function scDragStart(e, grip){
+  var card = grip.closest(".scen");
+  if (!card) return;
+  e.preventDefault();
+  card.classList.add("dragging");
+  document.body.classList.add("scen-dragging");
+  scDrag = { card: card, grabY: e.clientY, lastY: e.clientY, shift: 0, moved: false };
+  try { grip.setPointerCapture(e.pointerId); } catch (x) {}
+  scDrag.grip = grip;
+  scDrag.pid  = e.pointerId;
+}
+
+/* Moving the card in the DOM changes its layout position, which would make it
+   jump under the cursor. Measure before and after and fold the difference into
+   the offset so the card stays exactly where the pointer left it. */
+function scPlace(other, where){
+  /* Remember where every other card sits, so they can be animated from their
+     old position to the new one instead of jumping. */
+  var was = [];
+  scCards().forEach(function(c){
+    if (c !== scDrag.card) was.push([c, c.getBoundingClientRect().top]);
+  });
+
+  var before = scDrag.card.getBoundingClientRect().top;
+  if (where === "after") other.after(scDrag.card); else other.before(scDrag.card);
+  var after = scDrag.card.getBoundingClientRect().top;
+  scDrag.shift += (before - after);
+  scApply();
+
+  was.forEach(function(pair){
+    MotionUI.slide(pair[0], pair[1] - pair[0].getBoundingClientRect().top);
+  });
+}
+
+function scApply(){
+  var dy = scDrag.lastY - scDrag.grabY + scDrag.shift;
+  scDrag.card.style.transform = "translateY(" + dy + "px)";
+}
+
+function scDragMove(e){
+  if (!scDrag) return;
+  scDrag.lastY = e.clientY;
+  if (Math.abs(e.clientY - scDrag.grabY) > 3) scDrag.moved = true;
+  scApply();
+
+  var me = scDrag.card;
+  var myRect = me.getBoundingClientRect();
+  var myMid  = myRect.top + myRect.height / 2;
+
+  var cards = scCards();
+  for (var i = 0; i < cards.length; i++){
+    var other = cards[i];
+    if (other === me) continue;
+    var r = other.getBoundingClientRect();
+    var mid = r.top + r.height / 2;
+    var rel = other.compareDocumentPosition(me);
+    var meBefore = !!(rel & Node.DOCUMENT_POSITION_PRECEDING);
+    var meAfter  = !!(rel & Node.DOCUMENT_POSITION_FOLLOWING);
+    if (meBefore && myMid > mid){ scPlace(other, "after");  break; }
+    if (meAfter  && myMid < mid){ scPlace(other, "before"); break; }
+  }
+
+  /* Keep the card reachable when the list is taller than the window. */
+  var pad = 70;
+  if (e.clientY < pad) window.scrollBy(0, -Math.ceil((pad - e.clientY) / 6));
+  else if (e.clientY > window.innerHeight - pad)
+    window.scrollBy(0, Math.ceil((e.clientY - (window.innerHeight - pad)) / 6));
+}
+
+function scDragEnd(){
+  if (!scDrag) return;
+  var card = scDrag.card, moved = scDrag.moved, grip = scDrag.grip, pid = scDrag.pid;
+  try { if (grip && pid != null) grip.releasePointerCapture(pid); } catch (x) {}
+  scDrag = null;
+
+  card.style.transform = "";
+  card.classList.remove("dragging");
+  document.body.classList.remove("scen-dragging");
+
+  if (!moved) return;
+  scCommitOrder();
+  MotionUI.settle(card);
+  toast("Scenario order updated");
+}
+
+document.addEventListener("pointerdown", function(e){
+  var grip = e.target.closest && e.target.closest(".scgrip");
+  if (grip && e.button === 0) scDragStart(e, grip);
+});
+document.addEventListener("pointermove", scDragMove);
+document.addEventListener("pointerup", scDragEnd);
+document.addEventListener("pointercancel", scDragEnd);
+
+/* A drag handle nobody can reach from the keyboard is only half a feature. */
+document.addEventListener("keydown", function(e){
+  var grip = e.target.closest && e.target.closest(".scgrip");
+  if (!grip || !e.altKey) return;
+  if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+  e.preventDefault();
+  var card = grip.closest(".scen");
+  var sib  = e.key === "ArrowUp" ? card.previousElementSibling : card.nextElementSibling;
+  if (!sib || !sib.classList.contains("scen")) return;
+  if (e.key === "ArrowUp") sib.before(card); else sib.after(card);
+  scCommitOrder();
+  card.querySelector(".scgrip").focus({preventScroll:true});
+  card.scrollIntoView({block:"nearest"});
+  MotionUI.settle(card);
+});
+
 })();

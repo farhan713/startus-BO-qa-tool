@@ -1750,4 +1750,9 @@ if __name__ == "__main__":
     print("=" * 60)
     print("  Open http://localhost:5050 in your browser.")
     print("  Press Ctrl+C to stop.\n")
-    app.run(host="0.0.0.0", port=5050, debug=False, threaded=True)
+    # Port is configurable because 5050 collides with Docker on some machines.
+    # Docker binds it on IPv6 while this binds IPv4, so "localhost" silently
+    # reaches Docker and every request 404s while the tool looks fine on
+    # 127.0.0.1 — a confusing failure worth being able to sidestep.
+    port = int(os.environ.get("QA_PORT") or 5055)
+    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)

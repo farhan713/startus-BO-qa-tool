@@ -430,17 +430,14 @@ def apply_rules(yaml_text: str, prompt: str) -> PromptResult:
 # ============================================================ Gemini path
 
 def _have_gemini() -> bool:
-    return bool(os.environ.get("GEMINI_API_KEY", "").strip())
+    from framework import llm
+    return llm.available()
 
 
-def _gemini_call(prompt_text: str, yaml_text: str, model: str = "gemini-flash-latest",
+def _gemini_call(prompt_text: str, yaml_text: str, model: str | None = None,
                  max_retries: int = 3) -> str:
-    """Call Gemini with the prompt + current YAML. Returns the new YAML
-    text. Retries with exponential backoff on transient errors."""
-    from google import genai
-    from google.genai.errors import APIError
-
-    client = genai.Client()
+    """Refine the YAML with whichever model is configured. Returns new YAML."""
+    from framework import llm
     instr = (
         "You are refining a YAML test plan for a UI test automation tool. "
         "The YAML must remain valid for the parser, which accepts this shape:\n"
@@ -452,32 +449,16 @@ def _gemini_call(prompt_text: str, yaml_text: str, model: str = "gemini-flash-la
         "assert_visible|assert_text|assert_no_errors|assert_rows_min|"
         "assert_rows_max|todo>, target?: <str>, value?: <str> }\n\n"
         "Apply the user's instructions to the YAML below. Output ONLY the "
-        "resulting YAML — no markdown fences, no commentary, no explanation.\n"
+        "resulting YAML - no markdown fences, no commentary, no explanation.\n"
         "Preserve any leading `# comment` lines verbatim.\n\n"
         f"=== USER INSTRUCTIONS ===\n{prompt_text}\n\n"
         f"=== CURRENT YAML ===\n{yaml_text}\n"
     )
-    last_err = None
-    for attempt in range(max_retries):
-        try:
-            r = client.models.generate_content(model=model, contents=instr)
-            text = (r.text or "").strip()
-            # Strip accidental markdown fences if Gemini added them anyway
-            text = re.sub(r"^```(?:yaml)?\s*", "", text)
-            text = re.sub(r"\s*```\s*$", "", text)
-            return text
-        except APIError as e:
-            last_err = e
-            code = getattr(e, "code", None)
-            # Retry only on transient errors
-            if code in (429, 500, 502, 503, 504):
-                time.sleep(2 ** attempt)        # 1s, 2s, 4s
-                continue
-            raise
-    raise last_err or RuntimeError("gemini call failed")
+    text = llm.complete(instr, max_retries=max_retries)
+    text = re.sub(r"^```(?:yaml)?\s*", "", text)
+    text = re.sub(r"\s*```\s*$", "", text)
+    return text
 
-
-# Daily-usage guard so the free tier can never be accidentally blown
 def _usage_path() -> Path:
     return Path.home() / ".stratus-qa" / "llm-usage.json"
 
@@ -504,7 +485,7 @@ def llm_refine(yaml_text: str, prompt: str,
     error message."""
     if not _have_gemini():
         return PromptResult(yaml_text=yaml_text, llm_used=False,
-                            llm_error="GEMINI_API_KEY not set in environment")
+                            llm_error="no language model is configured")
     if daily_limit is None:
         daily_limit = int(os.environ.get("GEMINI_DAILY_REQUEST_LIMIT") or "200")
     usage = _load_usage()
@@ -559,7 +540,7 @@ def llm_available() -> dict:
     limit = int(os.environ.get("GEMINI_DAILY_REQUEST_LIMIT") or "200")
     return {
         "configured": _have_gemini(),
-        "model": os.environ.get("GEMINI_MODEL") or "gemini-flash-latest",
+        "model": __import__("framework.llm", fromlist=["llm"]).model_name(),
         "used_today": today,
         "daily_limit": limit,
     }

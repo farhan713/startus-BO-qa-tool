@@ -454,13 +454,40 @@ label.f small{font-weight:450;text-transform:none;letter-spacing:0;color:var(--i
 .errbox a{color:var(--danger);font-weight:550}
 
 /* ---------- toast ---------- */
+/* Centred with auto margins rather than translateX(-50%), so Motion can own
+   the transform for the slide-in without fighting the centring. */
 #toast{
-  position:fixed;bottom:32px;left:50%;transform:translateX(-50%) translateY(10px);
+  position:fixed;bottom:32px;left:0;right:0;margin-inline:auto;width:fit-content;
+  transform:translateY(10px);
   background:var(--ink);color:#fff;font-size:13px;font-weight:450;padding:13px 22px;
   border-radius:var(--r);opacity:0;pointer-events:none;transition:.28s var(--ease);
   z-index:99;max-width:82vw;text-align:center;box-shadow:var(--sh-3);
 }
-#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.show{opacity:1;transform:translateY(0)}
+
+/* When Motion is driving, CSS must not also transition these — the two curves
+   compete and the result stutters. */
+/* Hover lift. CSS holds this for as long as the pointer is over the element,
+   which a one-shot tween cannot do. Pointer-only: on touch there is no hover
+   state to leave, so the lift would stick. */
+@media (hover:hover) and (pointer:fine){
+  .scen,.pick,.card,.qcard2{transition:transform .18s var(--ease),
+                                       box-shadow .18s var(--ease),
+                                       border-color .16s var(--ease)}
+  .scen:hover,.pick:hover,.qcard2:hover{transform:translateY(-2px)}
+  .card:hover{transform:translateY(-1px)}
+}
+
+html[data-motion="on"] #toast{transition:none}
+html[data-motion="on"] .caret{transition:none}
+/* Motion springs scaleX rather than width: a spring needs a unitless value
+   (percentages are silently dropped), and scaling skips layout each frame. */
+html[data-motion="on"] .pbar>div{
+  transition:none;width:100%;transform:scaleX(0);transform-origin:left center}
+
+@media (prefers-reduced-motion:reduce){
+  #toast{transition:opacity .01s}
+}
 
 .spin{
   display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,.3);

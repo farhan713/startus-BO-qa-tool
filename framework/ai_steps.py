@@ -26,7 +26,8 @@ VALID_ACTIONS = {
 
 
 def available() -> bool:
-    return bool(os.environ.get("GEMINI_API_KEY", "").strip())
+    from framework import llm
+    return llm.available()
 
 
 def _screen_context(entry: dict | None) -> str:
@@ -104,26 +105,23 @@ be able to do. Do NOT invent a UI action for those.
 """
 
 
-def _call(model_text: str, model: str = "gemini-flash-latest", max_retries: int = 3):
-    from google import genai
-    from google.genai.errors import APIError
-    import time
-    client = genai.Client()
-    last = None
-    for attempt in range(max_retries):
-        try:
-            r = client.models.generate_content(model=model, contents=model_text)
-            t = (r.text or "").strip()
-            t = re.sub(r"^```(?:json)?\s*", "", t)
-            t = re.sub(r"\s*```\s*$", "", t)
-            return json.loads(t)
-        except APIError as e:
-            last = e
-            time.sleep(1.5 * (attempt + 1))
-        except json.JSONDecodeError as e:
-            last = e
-            break
-    raise RuntimeError(f"Gemini step translation failed: {str(last)[:160]}")
+def _call(model_text: str, model: str | None = None, max_retries: int = 3):
+    """Ask the model and parse its JSON reply.
+
+    Provider choice lives in framework.llm, so this works against Azure AI
+    Foundry or Gemini without changing anything here.
+    """
+    from framework import llm
+    try:
+        t = llm.complete(model_text, max_retries=max_retries)
+    except llm.LLMError as e:
+        raise RuntimeError(f"Step translation failed: {str(e)[:200]}") from None
+    t = re.sub(r"^```(?:json)?\s*", "", t.strip())
+    t = re.sub(r"\s*```\s*$", "", t)
+    try:
+        return json.loads(t)
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"Model did not return JSON: {str(e)[:120]}") from None
 
 
 def translate_todos(todos: list[str], screen: str, entry: dict | None = None,
