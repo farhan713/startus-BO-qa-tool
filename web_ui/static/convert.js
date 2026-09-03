@@ -805,6 +805,33 @@ $("savebtn").addEventListener("click", function () {
   }).then(function () { btn.innerHTML = old; btn.disabled = false; });
 });
 
+/* Smart run — hand the scenarios to the AI agent instead of the script-runner.
+   The agent reads each screen live and works through the goal like a human, so
+   it copes with loosely-worded test cases the fixed steps can't. */
+$("agentbtn").addEventListener("click", function () {
+  var p = connection();
+  if (!p.url)  { toast("Enter the BackOffice address first"); $("cnUrl").focus(); return; }
+  if (!p.user) { toast("Enter the username the test should sign in with"); $("cnUser").focus(); return; }
+  var btn = this, old = btn.innerHTML;
+  btn.innerHTML = '<span class="spin"></span>Agent starting'; btn.disabled = true;
+  api("/api/run", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      url: p.url, user: p.user || "", password: p.password || "", machine_id: p.machine_id || "",
+      agent_mode: true,
+      custom_tests_yaml: S.yaml
+    })
+  }).then(function () {
+    btn.innerHTML = old; btn.disabled = false;
+    toast("AI agent started on " + (p.label || "the test server"));
+    startLive();
+  }).catch(function (e) {
+    btn.innerHTML = old; btn.disabled = false;
+    if (e && e.needsLogin) { needsLogin("run a test"); return; }
+    fail("<b>Could not start the agent.</b> " + esc(e.message));
+  });
+});
+
 $("runbtn").addEventListener("click", function () {
   var c = counts();
   if (c.open && !confirm(c.open + " step(s) still need an answer. They will be skipped. Run anyway?")) return;
