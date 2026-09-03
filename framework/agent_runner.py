@@ -57,6 +57,9 @@ _OBSERVE_JS = r"""
     if (!vis(el)) return;
     const tag = el.tagName.toLowerCase();
     const type = (el.getAttribute('type') || '').toLowerCase();
+    // Skip fields the tester cannot edit — trying to type into them just times out.
+    if ((tag === 'input' || tag === 'select' || tag === 'textarea') &&
+        (el.disabled || el.readOnly)) return;
     let label = near_label(el) || clip(el.getAttribute('aria-label') ||
                 el.value || el.textContent || el.getAttribute('placeholder'));
     let kind = 'button';
@@ -206,7 +209,20 @@ def _act(page, a: dict):
         if kind == "fill":
             if not loc:
                 return False, f"field {tgt!r} not found"
-            loc.fill(val, timeout=2500)
+            # The agent sometimes tries to type into a dropdown. Auto-correct:
+            # if the target is a <select>, choose a different option instead.
+            try:
+                if (loc.evaluate("el => el.tagName") or "").lower() == "select":
+                    opts = loc.evaluate(
+                        "el => [...el.options].map(o => o.textContent.trim()).filter(Boolean)")
+                    cur = loc.evaluate("el => (el.selectedOptions[0]||{}).textContent||''").strip()
+                    pick = next((o for o in opts if o and o != cur), None)
+                    if pick:
+                        loc.select_option(label=pick, timeout=2500)
+                        return True, f"selected {tgt}={pick} (was a dropdown)"
+            except Exception:
+                pass
+            loc.fill(val, timeout=1500)
             return True, f"filled {tgt}={val}"
 
         if kind == "select":
@@ -285,7 +301,10 @@ Choose the SINGLE best next action. Reply with ONE JSON object:
   "reason":"<one short phrase>"}}
 
 Rules:
-- For "target", copy the control's "id" if it is non-empty, otherwise its "label". Nothing else.
+- CRITICAL: "target" MUST be copied verbatim from the "interactive controls" list
+  above (its id if non-empty, else its label). NEVER invent a field name or guess an
+  id — if the field you want is not listed, it is not on this screen; pick from what
+  IS listed or take a different step.
 - For "select", "value" MUST be one of that dropdown's listed "options".
 - To LIST records, click Search WITHOUT setting filter dropdowns first — filters narrow results and often return nothing. Only set a filter if you specifically need one record.
 - If a search shows no grid rows, clear/Reset the criteria and Search again.
