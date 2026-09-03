@@ -148,9 +148,17 @@ def _azure(prompt: str, temperature: float, timeout: int) -> str:
     except Exception as e:
         raise LLMError(f"Azure call failed: {str(e)[:200]}") from None
     try:
-        return (data["choices"][0]["message"]["content"] or "").strip()
+        choice = data["choices"][0]
+        text   = (choice["message"]["content"] or "").strip()
     except (KeyError, IndexError, TypeError):
         raise LLMError(f"unexpected Azure response: {str(data)[:200]}") from None
+    # A reply cut off at the token limit is still valid JSON at the transport
+    # level but truncated mid-array, so it surfaced as an unexplained
+    # JSONDecodeError far from the cause. Name it here instead.
+    if choice.get("finish_reason") == "length":
+        raise LLMError("Azure reply was truncated at the token limit "
+                       "(finish_reason=length) — send a smaller batch")
+    return text
 
 
 def _gemini(prompt: str, temperature: float) -> str:

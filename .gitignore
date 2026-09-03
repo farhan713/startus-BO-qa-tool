@@ -40,3 +40,4 @@ Thumbs.db
 # - All framework/ code
 # - All web_ui/ code
 # - docs/ and *.md files
+*.crawled-backup.json

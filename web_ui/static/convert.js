@@ -967,6 +967,10 @@ function edLoad(){
     fd.append("file", S.file);
     fd.append("screen", S.screen || "yourscreen");
     if (S.sheet) fd.append("sheet", S.sheet);
+    /* Ask the second tier to translate what the rules could not. Without this
+       the model is never consulted and every unmapped step becomes a question:
+       on a real Celerant file that was 64 questions where 62 were answerable. */
+    fd.append("use_ai", "1");
     fetch("/api/import-structured", {method:"POST", body:fd})
       .then(function(r){ return r.json(); }).then(done).catch(function(){});
   } else {

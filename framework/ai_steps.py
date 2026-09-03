@@ -119,9 +119,25 @@ def _call(model_text: str, model: str | None = None, max_retries: int = 3):
     t = re.sub(r"^```(?:json)?\s*", "", t.strip())
     t = re.sub(r"\s*```\s*$", "", t)
     try:
-        return json.loads(t)
-    except json.JSONDecodeError as e:
-        raise RuntimeError(f"Model did not return JSON: {str(e)[:120]}") from None
+        parsed = json.loads(t)
+    except json.JSONDecodeError:
+        # The model sometimes wraps the array in prose. Take the outermost
+        # bracketed span rather than losing the whole batch: a dropped batch is
+        # indistinguishable from "the model declined everything", which is how
+        # the same input scored 35 conversions on one run and 59 on the next.
+        m = re.search(r"\[.*\]", t, re.S)
+        if not m:
+            raise RuntimeError("Model did not return JSON") from None
+        try:
+            parsed = json.loads(m.group(0))
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"Model did not return JSON: {str(e)[:120]}") from None
+    # A reply may arrive as {"steps": [...]} instead of a bare array.
+    if isinstance(parsed, dict):
+        for key in ("steps", "results", "rows", "items", "translations"):
+            if isinstance(parsed.get(key), list):
+                return parsed[key]
+    return parsed
 
 
 def translate_todos(todos: list[str], screen: str, entry: dict | None = None,
@@ -162,10 +178,26 @@ def translate_todos(todos: list[str], screen: str, entry: dict | None = None,
             except (TypeError, ValueError):
                 continue
             action = str(row.get("action") or "").strip().lower()
+            if action not in VALID_ACTIONS:
+                # gpt-4.1 intermittently emits the action as the KEY rather than
+                # as the value of "action" — {"n": 3, "click": "Save"} instead of
+                # {"n": 3, "action": "click", "target": "Save"}. Recover it
+                # instead of discarding the row.
+                for k, v in row.items():
+                    if str(k).strip().lower() in VALID_ACTIONS:
+                        action = str(k).strip().lower()
+                        if not row.get("target") and isinstance(v, str):
+                            row = dict(row, target=v)
+                        break
             if not (1 <= n <= len(chunk)) or action not in VALID_ACTIONS or action == "todo":
                 continue
             target = str(row.get("target") or "").strip()
             if not target and action not in ("open_search", "screenshot", "assert_no_errors"):
+                continue
+            # Duplicated n is routine in model output. The first answer is the
+            # considered one; a later duplicate is usually a restatement or a
+            # hallucinated extra row, so it must not overwrite.
+            if out.get(start + n - 1):
                 continue
             out[start + n - 1] = {
                 "action": action,

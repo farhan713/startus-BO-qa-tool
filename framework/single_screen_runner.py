@@ -187,3 +187,110 @@ def run_single_screen(
     t.network_log = network_log
     t.console_log = console_log
     return _build_crawl_result(t, [])
+
+
+def run_custom_multiscreen(
+    cfg: DemoConfig,
+    on_event: Callable[[StepEvent], None] | None = None,
+    custom_tests_yaml: str = "",
+    safe_mode: bool = True,
+) -> DemoResult:
+    """Run user test cases that span MANY screens, in one login session.
+
+    The single-screen runner filters custom tests to one screen, so a test file
+    covering 10 screens needs the app driven to each screen in turn. This logs in
+    once, then for every distinct screen named in the YAML it navigates there and
+    runs that screen's steps. No auto-generated smoke tests — only the tester's
+    own scenarios, each against its real screen.
+    """
+    t = _Tracker(on_event, cfg)
+    t.banner(f"Stratus QA — Multi-screen test against {cfg.base_url}")
+
+    catalog = load_catalog()
+    if not catalog:
+        t.fail("catalog", "no catalog found — run 'Discover Catalog' first")
+        return _build_crawl_result(t, [])
+
+    try:
+        tcs = parse_custom_tests(custom_tests_yaml)
+    except Exception as e:
+        t.fail("parse", f"could not read the test file: {e}")
+        return _build_crawl_result(t, [])
+    if not tcs:
+        t.fail("parse", "no test scenarios found in the file")
+        return _build_crawl_result(t, [])
+
+    # Group scenarios by their screen, preserving first-seen order.
+    by_screen: dict[str, list] = {}
+    for tc in tcs:
+        by_screen.setdefault((tc.screen or "").strip(), []).append(tc)
+
+    cat_by_name = {s.get("screenname", "").lower(): s
+                   for s in (catalog.get("screens") or [])}
+
+    from framework.demo_runner import build_url as _bu
+    shell_url = _bu(cfg.base_url, "/wrmsscreen")
+
+    network_log: list[dict] = []
+    console_log: list[dict] = []
+    try:
+        with _browser(headless=cfg.headless, network_buffer=network_log,
+                      console_buffer=console_log) as page:
+            t.section("Authenticating")
+            try:
+                landed = _login(page, cfg, t)
+                t.info(f"post-login URL: {landed}")
+                t.ok("logged in")
+                t.screenshot(page, "after_login")
+            except Exception as e:
+                t.fail("login", str(e), page=page)
+                return _build_crawl_result(t, [])
+
+            for screen, scenarios in by_screen.items():
+                cat_entry = cat_by_name.get(screen.lower())
+                if not cat_entry:
+                    avail = ", ".join(list(cat_by_name.keys())[:15])
+                    t.fail(f"{screen or '(blank)'}::catalog",
+                           f"screen {screen!r} not in catalog. Known: {avail}…")
+                    continue
+
+                url = _bu(cfg.base_url, cat_entry["data_href"])
+                t.section(f"→ {cat_entry.get('label') or screen} "
+                          f"({len(scenarios)} scenario(s))")
+
+                for i, tc in enumerate(scenarios, 1):
+                    # Fresh state per scenario: bounce through the shell, then in.
+                    try:
+                        page.goto(shell_url, wait_until="commit", timeout=15_000)
+                        page.goto(url, wait_until="domcontentloaded", timeout=20_000)
+                    except Exception:
+                        try:
+                            page.goto(url, wait_until="commit", timeout=10_000)
+                        except Exception as e:
+                            t.fail(f"{screen}::nav", str(e))
+                            continue
+                    try:
+                        page.wait_for_timeout(1200)
+                    except Exception:
+                        pass
+
+                    t.section(f"[{screen} {i}/{len(scenarios)}] {tc.name}")
+                    try:
+                        ok, notes = _execute_custom_steps(page, tc.steps, t, screen)
+                        for n in (notes or []):
+                            t.info(n)
+                        if ok:
+                            t.ok(f"passed ({len(tc.steps)} step(s))")
+                        safe = "".join(c if c.isalnum() else "_"
+                                       for c in tc.name)[:40]
+                        t.screenshot(page, f"{screen}_{i:02d}_{safe}")
+                    except Exception as e:
+                        t.fail(f"{screen}::{i}", str(e), page=page)
+    finally:
+        try:
+            _Tracker._last_network_log = list(network_log)
+            _Tracker._last_console_log = list(console_log)
+        except Exception:
+            pass
+
+    return _build_crawl_result(t, [])

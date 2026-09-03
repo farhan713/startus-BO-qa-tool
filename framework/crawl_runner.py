@@ -49,6 +49,7 @@ from __future__ import annotations
 
 import json
 import time
+import re
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -222,8 +223,23 @@ def _login(page, cfg: DemoConfig, t: _Tracker) -> str:
             f.appendChild(i);
         }}
     }}""")
+    # A fresh browser (no stored MACHINE_ID) opens a "Machine Screen" modal on
+    # load, whose overlay intercepts clicks on the login button. Handle it:
+    # fill the dialog's Machine ID and dismiss it before signing in. Real
+    # browsers skip this because localStorage already holds the machine.
+    try:
+        if page.locator("#machineID").is_visible(timeout=4_000):
+            page.fill("#machineID", machine_id)
+            page.click("#btnOK")
+            page.wait_for_selector("#machineID", state="hidden", timeout=6_000)
+    except Exception:
+        pass
+
     page.fill("#userid", cfg.user)
     page.fill("#passwd", cfg.password)
+    # Wait for any lingering modal overlay to clear so the click is not intercepted.
+    try: page.wait_for_selector(".ui-widget-overlay", state="hidden", timeout=4_000)
+    except Exception: pass
     page.click("#btnLogin")
     try: page.wait_for_load_state("networkidle", timeout=8_000)
     except Exception: pass
@@ -579,7 +595,26 @@ def _execute_custom_steps(page, steps: list, t: _Tracker, screen_label: str) -> 
                 time.sleep(float(target or value or 1))
 
             elif action == "assert_visible":
-                page.locator(str(target)).first.wait_for(state="visible", timeout=10_000)
+                # Testers write a label ("Buying Club - Goal for Reward") or a
+                # field id ("#CLUB_MAX_PURCH"). Try it as a selector first; if
+                # that is not valid CSS/is not found, fall back to matching any
+                # visible element whose text contains the target. This is what a
+                # human means by "the X field should be visible".
+                tgt = str(target).strip()
+                try:
+                    page.locator(tgt).first.wait_for(state="visible", timeout=4_000)
+                except Exception:
+                    found = page.locator(
+                        f"text=/{re.escape(tgt)}/i"
+                    ).first
+                    try:
+                        found.wait_for(state="visible", timeout=6_000)
+                    except Exception:
+                        # last resort: substring scan of the visible body text
+                        body = page.locator("body").inner_text(timeout=3000)
+                        if tgt.lower() not in body.lower():
+                            notes.append(f"step {step_i}: {tgt!r} not visible on screen")
+                            return False, notes
 
             elif action == "assert_text":
                 body = page.locator("body").inner_text(timeout=3000)

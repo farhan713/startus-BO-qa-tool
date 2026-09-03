@@ -77,12 +77,19 @@ def _r_delete(_): return {"action": "click", "target": "Delete"}
 def _r_print(_):  return {"action": "click", "target": "Print"}
 
 def _r_assert_visible(m):
-    return {"action": "assert_visible", "target": m.group(1).strip().rstrip(".")}
+    subject = m.group(1).strip().rstrip(".:-") if m.lastindex else ""
+    # "Results should be visible" -> check "Results". A bare "should be visible"
+    # names nothing, so there is no assertion to make; leave it for a human.
+    if not subject:
+        return {"action": "todo", "target": m.group(0).strip()[:200]}
+    return {"action": "assert_visible", "target": subject}
 def _r_assert_not_visible(m):
     # We have no `assert_not_visible` action yet — keep as todo so a human
     # can decide between checking absence vs simply not asserting presence.
+    subject = m.group(1).strip().rstrip(".:-") if m.lastindex else ""
     return {"action": "todo",
-            "target": f"verify NOT visible: {m.group(1).strip()}",
+            "target": f"verify NOT visible: {subject}" if subject
+                      else m.group(0).strip()[:200],
             "_hint": "assert_not_visible"}
 def _r_assert_text(m):
     return {"action": "assert_text", "value": m.group(1).strip().rstrip(".")}
@@ -218,14 +225,17 @@ RULES: list = [
      _r_select, "select-noquote"),
 
     # ---- Assertions (negative first so 'should not' beats 'should') ------
-    (re.compile(r"\b(?:should not|shouldn['’]?t|must not|cannot)\s+(?:be\s+)?(?:visible|shown|displayed|appear|allowed|available)\b.*$", re.I),
+    # The subject is captured so the builder can name what must be absent.
+    # Without a group, group(1) raised IndexError, the bare except below
+    # swallowed it, and the step silently became a question.
+    (re.compile(r"^(.*?)\b(?:should not|shouldn['’]?t|must not|cannot)\s+(?:be\s+)?(?:visible|shown|displayed|appear|allowed|available)\b.*$", re.I),
      _r_assert_not_visible, "assert-not-visible"),
     (re.compile(r"\b(?:saves?\s+(?:properly|successfully|correctly)|saved?\s+correctly|saves? to (?:the )?(?:database|db))\b.*$", re.I),
      _r_assert_no_errors, "assert-no-errors"),
     (re.compile(r"\bno (?:errors?|warning)s?\b.*$", re.I),
      _r_assert_no_errors, "assert-no-errors"),
     # "should be visible" / "should display X" / "should appear"
-    (re.compile(r"\b(?:should|must|will)\s+(?:be\s+)?(?:visible|shown|displayed|appear|present|available)\b.*$", re.I),
+    (re.compile(r"^(.*?)\b(?:should|must|will)\s+(?:be\s+)?(?:visible|shown|displayed|appear|present|available)\b.*$", re.I),
      _r_assert_visible, "assert-visible"),
 
     # ---- Display / show a literal quoted text -----------------------------

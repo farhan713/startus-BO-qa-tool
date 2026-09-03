@@ -296,6 +296,7 @@ def api_run():
         single_mode = bool(data.get("single_mode", False))
         catalog_mode = bool(data.get("catalog_mode", False))
         bulk_mode = bool(data.get("bulk_mode", False))
+        agent_mode = bool(data.get("agent_mode", False))
         single_screenname = (data.get("single_screenname") or "").strip()
         single_safe = bool(data.get("single_safe", True))
         crawl_scope = (data.get("crawl_scope") or "").strip()
@@ -323,7 +324,7 @@ def api_run():
 
     def _worker(c: DemoConfig, state: RunState, use_api: bool,
                 use_crawl: bool, use_single: bool, use_catalog: bool,
-                use_bulk: bool,
+                use_bulk: bool, use_agent: bool,
                 single_screen: str, single_safe_mode: bool,
                 scope: str, max_n: int | None,
                 types: list, custom_yaml: str,
@@ -345,7 +346,36 @@ def api_run():
                 pass
             state.queue.put(evt)
         try:
-            if use_catalog:
+            if use_agent:
+                from framework.agent_runner import run_agent, AgentGoal, synthesize_goal
+                from framework.crawl_runner import parse_custom_tests as _pct
+                import json as _json, glob as _glob
+                _cat=None
+                for _f in _glob.glob("knowledge_base/screens_catalog.json"):
+                    try: _cat=_json.load(open(_f)); break
+                    except Exception: pass
+                goals=[]
+                try:
+                    for tc in _pct(custom_yaml):
+                        # each scenario becomes a plain-English goal for the agent
+                        def _txt(st):
+                            if isinstance(st, dict):
+                                return " ".join(x for x in (st.get("target"), st.get("value")) if x)
+                            return " ".join(x for x in (getattr(st,"target",""), getattr(st,"value","")) if x)
+                        step_texts=[_txt(st).strip() for st in (tc.steps or []) if _txt(st).strip()]
+                        # AI turns the messy scenario into ONE clear objective the
+                        # agent can actually pursue (instead of a soup of targets).
+                        goal=synthesize_goal(tc.name or "scenario", tc.screen, step_texts)
+                        goals.append(AgentGoal(name=(tc.name or "scenario")[:50],
+                                               goal=goal, start_screen=tc.screen, max_steps=14))
+                except Exception as _e:
+                    on_event(StepEvent(type="fail", text=f"could not read scenarios: {_e}"))
+                if goals:
+                    res = run_agent(c, goals, on_event=on_event, catalog=_cat)
+                else:
+                    on_event(StepEvent(type="fail", text="no scenarios to test"))
+                    res = DemoResult(passed=False, steps_total=0, steps_passed=0, steps_failed=1, duration_s=0)
+            elif use_catalog:
                 build_catalog(
                     c, on_event,
                     type_filter=set(types) if types else None,
@@ -362,11 +392,30 @@ def api_run():
                     selected_screens=sel_screens or None,
                 )
             elif use_single:
-                res = run_single_screen(
-                    c, single_screen, on_event,
-                    safe_mode=single_safe_mode,
-                    custom_tests_yaml=custom_yaml,
-                )
+                # A test file can span many screens; single-screen mode can only
+                # drive one. Detect a multi-screen file (or the placeholder
+                # 'yourscreen') and run each scenario against its own screen.
+                distinct = []
+                if custom_yaml.strip():
+                    try:
+                        from framework.crawl_runner import parse_custom_tests as _pct
+                        distinct = list({(tc.screen or "").strip().lower()
+                                         for tc in _pct(custom_yaml)
+                                         if (tc.screen or "").strip()})
+                    except Exception:
+                        distinct = []
+                _placeholder = (single_screen or "").lower() in ("", "yourscreen", "customer")
+                if custom_yaml.strip() and (len(distinct) > 1 or _placeholder):
+                    from framework.single_screen_runner import run_custom_multiscreen
+                    res = run_custom_multiscreen(
+                        c, on_event, custom_yaml, safe_mode=single_safe_mode,
+                    )
+                else:
+                    res = run_single_screen(
+                        c, single_screen, on_event,
+                        safe_mode=single_safe_mode,
+                        custom_tests_yaml=custom_yaml,
+                    )
             elif use_crawl:
                 res = run_crawl(
                     c, on_event,
@@ -439,7 +488,7 @@ def api_run():
     threading.Thread(
         target=_worker,
         args=(cfg, CURRENT, api_mode, crawl_mode, single_mode, catalog_mode,
-              bulk_mode, single_screenname, single_safe, crawl_scope, crawl_max,
+              bulk_mode, agent_mode, single_screenname, single_safe, crawl_scope, crawl_max,
               crawl_types, custom_tests_yaml, selected_screens),
         daemon=True,
     ).start()
