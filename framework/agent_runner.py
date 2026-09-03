@@ -93,6 +93,32 @@ _OBSERVE_JS = r"""
     if (name) tabs.push(name);
   });
 
+  // A visible dialog/alert is how Stratus reports an action's outcome
+  // ("saved", "please select a row", a validation error). Surface its text so
+  // the agent can VERIFY a save worked instead of assuming a click succeeded.
+  // Is this a detail FORM (editing one record — has a Save/Cancel) or a LIST?
+  const btnText = b => (b.value || b.textContent || '').trim();
+  const hasSave = [...document.querySelectorAll('button, input[type=button], input[type=submit], a')]
+                    .some(b => vis(b) && /^(save|update)$/i.test(btnText(b)));
+  const hasCancel = [...document.querySelectorAll('button, input[type=button], a')]
+                      .some(b => vis(b) && /^(cancel|close)$/i.test(btnText(b)));
+  // A detail form has a SAVE button. Do NOT treat a list's search panel as a
+  // detail form just because it has filter dropdowns and a Close button — that
+  // mislabelling makes the agent try to Close instead of Search.
+  const isDetail = hasSave;
+  const screen_kind = isDetail
+      ? 'detail form (editing a record — change fields, then Save to persist)'
+      : (editBtns.length ? 'list (grid of records — click Search then open one with edit_row)'
+                         : 'a screen with no grid — search or navigate to find records');
+
+  let message = '';
+  const dlg = [...document.querySelectorAll('.ui-dialog, #dialog, .modal, [role=dialog]')]
+                .find(d => vis(d));
+  if (dlg) {
+    const body = dlg.querySelector('.ui-dialog-content, .modal-body, p') || dlg;
+    message = clip(body.textContent).slice(0, 120);
+  }
+
   return {
     url: (location.hash || location.pathname).slice(0, 80),
     title: clip((document.querySelector('h1, h2') || {}).textContent || document.title),
@@ -101,6 +127,8 @@ _OBSERVE_JS = r"""
     hasGrid: editBtns.length > 0,
     visibleEditButtons: visibleEdits,
     tabs: [...new Set(tabs)].slice(0, 12),
+    message,
+    screen_kind,
   };
 }
 """
@@ -151,6 +179,20 @@ def _act(page, a: dict):
                 idx = 0
             pick = btn.nth(idx) if 0 <= idx < n else btn.first
             pick.click(timeout=4000)
+            # Wait for the detail form to actually render (a Save/Cancel button or
+            # several inputs) so the next observation is not a half-drawn screen.
+            for _ in range(6):
+                page.wait_for_timeout(800)
+                try:
+                    ready = page.evaluate(
+                        "() => { const b=[...document.querySelectorAll('button,input,a')]"
+                        ".some(e=>e.offsetParent && /^(save|cancel|close)$/i.test((e.value||e.textContent||'').trim()));"
+                        " const f=document.querySelectorAll('select:not([style*=none]), input[type=text]').length;"
+                        " return b || f>=4; }")
+                    if ready:
+                        break
+                except Exception:
+                    pass
             return True, "opened a record"
 
         loc = _find_visible(page, tgt)
@@ -229,6 +271,8 @@ CURRENT SCREEN:
   interactive controls: {controls}
   grid rows (records you can open): {rows}
   tabs: {tabs}
+  you are on: {screen_kind}
+  on-screen message/dialog: {message}
 
 WHAT YOU HAVE DONE:
 {history}
@@ -246,14 +290,23 @@ Rules:
 - To LIST records, click Search WITHOUT setting filter dropdowns first — filters narrow results and often return nothing. Only set a filter if you specifically need one record.
 - If a search shows no grid rows, clear/Reset the criteria and Search again.
 - To open a record from the grid, use "edit_row" with a rowIndex.
+- Once you are on a DETAIL FORM, do NOT open another record — make the change and Save.
+- To persist changes, click the button whose label is exactly "Save" (NOT "Action",
+  which opens a menu). Only fill/select fields that exist as controls above.
 - To press a button (Search, Save, OK, Action, Edit), use "click".
 - Never repeat an action that just failed — pick a different element or approach.
 - Only "give_up" after at least 6 varied attempts; prefer to keep trying.
-- Say "done" only when the GOAL is genuinely achieved.
+- VERIFY before finishing: after clicking Save, look at the on-screen message and
+  where you are. A save that CLOSES the detail form (you are back on the list/grid)
+  with NO error message is a SUCCESSFUL save — report "done". Do NOT try to re-find
+  the edited field on the list; the field only exists on the detail form.
+- If a message names an error or validation problem, the save FAILED — fix the cause
+  (e.g. a required field) and Save again; do not report done.
+- Say "done" once the field change was made and Saved with no error showing.
 Reply with only the JSON object."""
 
 
-def _decide(goal, state, history):
+def _decide(goal, state, history, stuck_hint=""):
     ctrls = []
     for c in state["controls"]:
         item = {"kind": c["kind"], "id": c.get("id", ""), "label": c.get("label", "")}
@@ -266,7 +319,9 @@ def _decide(goal, state, history):
         controls=json.dumps(ctrls[:40], ensure_ascii=False),
         rows=json.dumps(state["rows"][:12], ensure_ascii=False),
         tabs=json.dumps(state["tabs"], ensure_ascii=False),
-        history="\n".join(history[-7:]) or "(nothing yet)",
+        history=("\n".join(history[-7:]) or "(nothing yet)") + ("\n" + stuck_hint if stuck_hint else ""),
+        message=(state.get("message") or "(none)")[:120],
+        screen_kind=state.get("screen_kind", "other"),
     )
     raw = llm.complete(prompt, max_retries=2)
     raw = re.sub(r"^```(?:json)?|```$", "", raw.strip()).strip()
@@ -295,19 +350,24 @@ class AgentGoal:
 #  goal the agent can actually pursue. This is the "AI understands the test    #
 #  case" step: vague prose in, a focused objective out.                        #
 # --------------------------------------------------------------------------- #
-_SYNTH = """You turn a manual QA test scenario into ONE clear objective for an
-automation agent that drives a retail back-office web app.
+_SYNTH = """You turn a manual QA test scenario into ONE clear, ACHIEVABLE objective
+for an automation agent that drives a retail back-office web app.
 
 Scenario name: {name}
 Screen: {screen}
 The tester's raw steps (may be terse or vague):
 {steps}
 
-Write a SHORT, concrete testing objective (2-3 sentences) describing what to
-verify on that screen — what to search for, which record to open, which
-field/setting to check or change, and what confirms success. Focus on the ONE
-main thing the scenario is really testing. Do not invent features not implied
-by the steps. Reply with the objective text only, no preamble."""
+Write a SHORT objective (2-3 sentences) the agent can actually complete on that
+screen. Follow these rules:
+- Pick the ONE main thing the scenario verifies. Do not chain many sub-flows.
+- If it is a list screen, the objective should be: search to load records (with NO
+  filters, so results appear), open one record via its Edit button, then do the one
+  field change or check the scenario is about, and Save.
+- Name a concrete success signal (e.g. "the record saves with no error message",
+  "the field X is visible on the detail form").
+- Do not invent features not implied by the steps. Keep it doable in ~8 actions.
+Reply with the objective text only, no preamble."""
 
 
 def synthesize_goal(name: str, screen: str, step_texts: list[str]) -> str:
@@ -380,9 +440,18 @@ def _run_one_goal(page, g: AgentGoal, t: _Tracker):
     t.info(g.goal)
     history = []
     consec_fail = 0
+    last_actions = []
     for step in range(1, g.max_steps + 1):
         state = _observe(page)
-        act = _decide(g.goal, state, history)
+        # If the agent has repeated the same action several times with no progress,
+        # it is stuck in a loop (e.g. re-opening the same record). Tell it plainly.
+        stuck_hint = ""
+        if len(last_actions) >= 3 and len(set(last_actions[-3:])) == 1:
+            stuck_hint = (f"NOTE: '{last_actions[-1]}' has repeated 3 times without progressing. "
+                          f"Pick a DIFFERENT action or element this step. If you are already on a "
+                          f"detail form (fields + Save visible), change a field and Save. Keep trying "
+                          f"other options — do not give up yet.")
+        act = _decide(g.goal, state, history, stuck_hint)
         a = act.get("action")
         if a == "done":
             t.ok(f"GOAL MET — {act.get('reason', '')}")
@@ -408,6 +477,7 @@ def _run_one_goal(page, g: AgentGoal, t: _Tracker):
         line = f"step{step}: {a} {tgt} -> {'ok' if ok else 'FAILED: ' + msg}"
         t.info(f"  {line}  [{act.get('reason','')[:50]}]")
         history.append(line)
+        last_actions.append(f"{a}:{tgt}")
         try:
             safe = "".join(c if c.isalnum() else "_" for c in f"{g.name}_{step}_{a}")[:44]
             t.screenshot(page, safe, quiet=True)
@@ -432,30 +502,34 @@ def run_agent(cfg: DemoConfig, goals: list[AgentGoal],
     from framework.demo_runner import build_url as _bu
     shell_url = _bu(cfg.base_url, "/wrmsscreen")
 
-    passed = failed = 0
-    try:
-        with _browser(headless=cfg.headless) as page:
-            t.section("Authenticating")
-            landed = ""
-            for attempt in range(3):
-                try:
-                    landed = _login(page, cfg, t)
-                except Exception as e:
-                    landed = str(e)
-                # a real login leaves login.jsp for the app shell; if still on the
-                # login page, the submit did not take — wait and retry.
-                if "login.jsp" not in (page.url or "").lower():
-                    break
-                page.wait_for_timeout(2500)
-            if "login.jsp" in (page.url or "").lower():
-                t.fail("login", f"still on login page after retries ({page.url})", page=page)
-                return _result(t, 0, 1)
-            t.ok(f"logged in ({(page.url or '').split('/')[-1]})")
+    def _login_verified(page):
+        landed = ""
+        for _ in range(3):
+            try:
+                landed = _login(page, cfg, t)
+            except Exception as e:
+                landed = str(e)
+            if "login.jsp" not in (page.url or "").lower():
+                return True
+            page.wait_for_timeout(2500)
+        return "login.jsp" not in (page.url or "").lower()
 
-            for g in goals:
-                # open the goal's start screen if it names one. Go straight to the
-                # screen URL — bouncing through the shell first leaves the SPA on a
-                # stale hash route that a same-document hash change won't re-render.
+    passed = failed = 0
+    # Each goal runs in its OWN fresh browser + login. A long multi-goal session
+    # on this heavyweight jQuery app accumulates modal/SPA state that degrades
+    # later goals (the same goal passes alone but fails after others). Isolation
+    # costs one login per goal but makes every goal behave like the clean case.
+    for gi, g in enumerate(goals):
+        try:
+            with _browser(headless=cfg.headless) as page:
+                if gi == 0:
+                    t.section("Authenticating")
+                if not _login_verified(page):
+                    t.fail(g.name, f"login failed ({page.url})", page=page)
+                    failed += 1
+                    continue
+                if gi == 0:
+                    t.ok(f"logged in ({(page.url or '').split('/')[-1]})")
                 href = href_by_screen.get((g.start_screen or "").lower(), "")
                 if href:
                     try:
@@ -467,8 +541,9 @@ def run_agent(cfg: DemoConfig, goals: list[AgentGoal],
                 ok = _run_one_goal(page, g, t)
                 passed += int(ok)
                 failed += int(not ok)
-    finally:
-        pass
+        except Exception as e:
+            t.fail(g.name, f"session error: {str(e)[:60]}")
+            failed += 1
 
     return _result(t, passed, failed)
 
